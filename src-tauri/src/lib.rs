@@ -1,0 +1,612 @@
+use chrono::{DateTime, FixedOffset, Utc};
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
+use std::time::Instant;
+use tauri::{
+    menu::MenuBuilder,
+    path::BaseDirectory,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
+use windows::Win32::UI::ColorSystem::SetDeviceGammaRamp;
+use windows::Win32::UI::ColorSystem::GetDeviceGammaRamp;
+
+#[derive(Default)]
+struct LockState {
+    labels: Mutex<Vec<String>>,
+}
+#[derive(Default)]
+struct AppState {
+    allow_exit: AtomicBool,
+}
+
+const TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("icons/32x32.png");
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RestStorageConfig {
+    #[serde(default)]
+    custom_dir: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RestStorageSettings {
+    current_dir: String,
+    default_dir: String,
+    is_default: bool,
+}
+
+fn clamp(value: f64, min: f64, max: f64) -> f64 {
+    if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    }
+}
+
+fn temperature_to_rgb(temp: f64) -> (f64, f64, f64) {
+    let temp = clamp(temp, -3000.0, 10000.0) / 100.0;
+    let (mut r, mut g, mut b);
+    if temp <= 66.0 {
+        r = 255.0;
+        g = 99.4708025861 * temp.ln() - 161.1195681661;
+        b = if temp <= 19.0 {
+            0.0
+        } else {
+            138.5177312231 * (temp - 10.0).ln() - 305.0447927307
+        };
+    } else {
+        r = 329.698727446 * (temp - 60.0).powf(-0.1332047592);
+        g = 288.1221695283 * (temp - 60.0).powf(-0.0755148492);
+        b = 255.0;
+    }
+
+    r = clamp(r, 0.0, 255.0);
+    g = clamp(g, 0.0, 255.0);
+    b = clamp(b, 0.0, 255.0);
+    (r / 255.0, g / 255.0, b / 255.0)
+}
+
+fn apply_gamma(mult_r: f64, mult_g: f64, mult_b: f64) -> Result<(), String> {
+    unsafe {
+        let hdc = GetDC(HWND(0));
+        if hdc.0 == 0 {
+            return Err("无法获取显示设备句柄".into());
+        }
+
+        let mut ramp = [0u16; 256 * 3];
+        for i in 0..256 {
+            let base = i as f64 / 255.0;
+            ramp[i] = clamp(base * 65535.0 * mult_r, 0.0, 65535.0).round() as u16;
+            ramp[i + 256] = clamp(base * 65535.0 * mult_g, 0.0, 65535.0).round() as u16;
+            ramp[i + 512] = clamp(base * 65535.0 * mult_b, 0.0, 65535.0).round() as u16;
+        }
+
+        let ok = SetDeviceGammaRamp(hdc, ramp.as_ptr() as *const _).as_bool();
+        ReleaseDC(HWND(0), hdc);
+        if !ok {
+            return Err("设置色温失败".into());
+        }
+    }
+    Ok(())
+}
+
+#[repr(C)]
+struct GammaRamp {
+    red: [u16; 256],
+    green: [u16; 256],
+    blue: [u16; 256],
+}
+
+fn is_eye_protection_off(ramp: &GammaRamp) -> bool {
+    // 标准伽马 ramp 应该是线性的（近似）
+    // 检查 R、G、B 通道是否大致一致且呈线性增长
+    let mut is_linear = true;
+    
+    // 检查关键点的线性度
+    for i in (0..256).step_by(32) {
+        let expected = (i * 65535 / 255) as u16;
+        let tolerance = 1000; // 允许的误差范围
+        
+        if (ramp.red[i] as i32 - expected as i32).abs() > tolerance ||
+           (ramp.green[i] as i32 - expected as i32).abs() > tolerance ||
+           (ramp.blue[i] as i32 - expected as i32).abs() > tolerance {
+            is_linear = false;
+            break;
+        }
+    }
+    
+    // 检查 RGB 通道是否平衡（护眼模式通常会降低蓝色通道）
+    let mid = 128;
+    let red_mid = ramp.red[mid];
+    let green_mid = ramp.green[mid];
+    let blue_mid = ramp.blue[mid];
+    
+    let rgb_balance = (red_mid as i32 - green_mid as i32).abs() < 500 &&
+                      (green_mid as i32 - blue_mid as i32).abs() < 500;
+    
+    is_linear && rgb_balance
+}
+
+#[tauri::command]
+fn get_gamma(filter_enabled: bool, strength: f64, color_temp: f64) -> Result<(), String> {
+    let mut ramp: GammaRamp = unsafe { std::mem::zeroed() };
+
+    unsafe {
+        let hdc = GetDC(HWND(0));
+        if hdc.0 == 0 {
+            return Err("无法获取显示设备句柄".into());
+        }
+        let ok = GetDeviceGammaRamp(hdc, &mut ramp as *mut _ as *mut _).as_bool();
+        ReleaseDC(HWND(0), hdc);
+        if !ok {
+            return Err("获取色温失败".into());
+        }
+        if is_eye_protection_off(&ramp) {
+            let _sg = set_gamma(filter_enabled, strength, color_temp);
+        }
+    }
+    // let ramp_string = format!("{:?}", ramp);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_gamma(filter_enabled: bool, strength: f64, color_temp: f64) -> Result<(), String> {
+    if !filter_enabled {
+        return apply_gamma(1.0, 1.0, 1.0);
+    }
+    let (r, g, b) = temperature_to_rgb(color_temp);
+    let factor = clamp(strength / 100.0, 0.0, 1.0);
+    let mut mult_r = (1.0 - factor) + factor * r;
+    let mut mult_g = (1.0 - factor) + factor * g;
+    let mut mult_b = (1.0 - factor) + factor * b;
+
+    // Greenish bias to avoid reddish tint and reduce blue light.
+    let green_boost = 0.08 * factor;
+    let red_cut = 0.18 * factor;
+    let blue_cut = 0.35 * factor;
+    mult_r = clamp(mult_r * (1.0 - red_cut), 0.0, 1.0);
+    mult_g = clamp(mult_g * (1.0 + green_boost), 0.0, 1.0);
+    mult_b = clamp(mult_b * (1.0 - blue_cut), 0.0, 1.0);
+    apply_gamma(mult_r, mult_g, mult_b)
+}
+
+#[tauri::command]
+async fn show_lock_windows(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LockState>,
+    end_at_ms: i64,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
+    if !labels.is_empty() {
+        for label in labels.iter() {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.set_always_on_top(true);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+        return Ok(());
+    }
+
+    let monitors = app.available_monitors().map_err(|err| err.to_string())?;
+    append_app_log(&app, &format!("锁屏创建开始 monitors={}", monitors.len()));
+    for (index, monitor) in monitors.into_iter().enumerate() {
+        let label = format!("lockscreen-{}", index);
+        let position = monitor.position();
+        let size = monitor.size();
+        let scale = monitor.scale_factor();
+        let width = (size.width as f64 / scale).ceil() + 400.0;
+        let height = (size.height as f64 / scale).ceil() + 400.0;
+        let x = (position.x as f64 / scale).floor() - 200.0;
+        let y = (position.y as f64 / scale).floor() - 200.0;
+
+        let url = format!("index.html?lockscreen=1&end={}", end_at_ms,);
+        let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
+            .decorations(false)
+            .transparent(false)
+            .resizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .position(x, y)
+            .inner_size(width, height)
+            .build()
+            .map_err(|err| err.to_string())?;
+
+        apply_default_window_icon(&app, &window);
+        let _ = window.set_fullscreen(true);
+        let _ = window.set_focus();
+        labels.push(label);
+    }
+
+    append_app_log(
+        &app,
+        &format!(
+            "锁屏创建完成 labels={} elapsed_ms={}",
+            labels.len(),
+            start.elapsed().as_millis()
+        ),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_lock_windows(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LockState>,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
+    append_app_log(&app, &format!("锁屏关闭开始 labels={}", labels.len()));
+    for label in labels.iter() {
+        if !label.as_str().starts_with("lockscreen-") {
+            continue;
+        }
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.close();
+        }
+    }
+    labels.clear();
+    append_app_log(
+        &app,
+        &format!("锁屏关闭完成 {}ms", start.elapsed().as_millis()),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+async fn show_notification_windows(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LockState>,
+    message: String,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
+    if !labels.is_empty() {
+        for label in labels.iter() {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.set_always_on_top(true);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+        return Ok(());
+    }
+
+    let monitors = app.available_monitors().map_err(|err| err.to_string())?;
+    append_app_log(&app, &format!("通知创建开始 monitors={}", monitors.len()));
+    for (index, _monitor) in monitors.into_iter().enumerate() {
+        let label = format!("notification-{}", index);
+
+        let url = format!("index.html?notification=1&message={}", message,);
+        let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
+            .decorations(false)
+            .transparent(false)
+            .resizable(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .inner_size(200.0, 100.0)
+            .center()
+            .build()
+            .map_err(|err| err.to_string())?;
+
+        apply_default_window_icon(&app, &window);
+        let _ = window.set_fullscreen(false);
+        let _ = window.set_focus();
+        labels.push(label);
+    }
+
+    append_app_log(
+        &app,
+        &format!(
+            "通知创建完成 labels={} elapsed_ms={}",
+            labels.len(),
+            start.elapsed().as_millis()
+        ),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_notification_windows(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LockState>,
+) -> Result<(), String> {
+    let start = Instant::now();
+    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
+    append_app_log(&app, &format!("通知关闭开始 labels={}", labels.len()));
+    for label in labels.iter() {
+        if !label.as_str().starts_with("notification-") {
+            continue;
+        }
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.close();
+        }
+    }
+    labels.clear();
+    append_app_log(
+        &app,
+        &format!("通知关闭完成 {}ms", start.elapsed().as_millis()),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn lockscreen_action(app: tauri::AppHandle, action: String) -> Result<(), String> {
+    append_app_log(&app, &format!("锁屏动作: {}", action));
+    for (_label, window) in app.webview_windows() {
+        let _ = window.emit("lockscreen-action", action.clone());
+    }
+    Ok(())
+}
+
+fn date_time() -> String {
+    let utc_time = Utc::now();
+    let china_timezone = FixedOffset::east_opt(8 * 3600).unwrap();
+    // 将 UTC 时间转换为中国标准时间
+    let china_time: DateTime<FixedOffset> = utc_time.with_timezone(&china_timezone);
+    // 格式化
+    return china_time.format("%Y-%m-%d %H:%M:%S").to_string();
+}
+
+fn load_storage_config(path: &Path) -> RestStorageConfig {
+    let Ok(data) = fs::read_to_string(path) else {
+        return RestStorageConfig::default();
+    };
+    serde_json::from_str(&data).unwrap_or_default()
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
+}
+
+fn default_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .resolve("log", BaseDirectory::AppCache)
+        .map_err(|err| err.to_string())
+}
+
+fn storage_config_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .resolve("", BaseDirectory::AppConfig)
+        .map_err(|err| err.to_string())?;
+    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    Ok(dir.join("wallpaper-storage.json"))
+}
+
+fn storage_settings_from_config(
+    app: &AppHandle,
+    config: &RestStorageConfig,
+) -> Result<RestStorageSettings, String> {
+    let default_dir = default_dir(app)?;
+    let current_dir = if config.custom_dir.trim().is_empty() {
+        default_dir.clone()
+    } else {
+        PathBuf::from(config.custom_dir.trim())
+    };
+    Ok(RestStorageSettings {
+        current_dir: path_to_string(&current_dir),
+        default_dir: path_to_string(&default_dir),
+        is_default: current_dir == default_dir,
+    })
+}
+
+fn get_storage_settings_inner(app: &AppHandle) -> Result<RestStorageSettings, String> {
+    let config_path = storage_config_path(app)?;
+    let config = load_storage_config(&config_path);
+    storage_settings_from_config(app, &config)
+}
+
+fn allow_dir_on_scope(app: &AppHandle, dir: &Path) -> Result<(), String> {
+    app.asset_protocol_scope()
+        .allow_directory(dir, true)
+        .map_err(|err| err.to_string())
+}
+
+fn ensure_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let settings = get_storage_settings_inner(app)?;
+    let dir = PathBuf::from(settings.current_dir);
+    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    allow_dir_on_scope(app, &dir)?;
+    Ok(dir)
+}
+
+fn append_line(path: &Path, message: &str) {
+    let ts = date_time();
+    let line = format!("[{}] {}\n", ts, message);
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
+fn append_app_log(app: &AppHandle, message: &str) {
+    let dir = match ensure_dir(app) {
+        Ok(dir) => dir,
+        Err(_) => return,
+    };
+    append_line(&dir.join("app.log"), message);
+}
+
+#[tauri::command]
+fn log_app(app: AppHandle, message: String) -> Result<(), String> {
+    append_app_log(&app, &message);
+    Ok(())
+}
+
+fn apply_default_window_icon<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    window: &tauri::WebviewWindow<R>,
+) {
+    if let Some(icon) = app.default_window_icon().cloned() {
+        let _ = window.set_icon(icon);
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+            let shift_1_shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::Digit1);
+            let app_handle = app.handle();
+            app_handle.plugin(
+                tauri_plugin_global_shortcut::Builder::new().with_handler({
+                    let app_handle = app_handle.clone();
+                    let shift_1_shortcut = shift_1_shortcut.clone();
+                    move |_app, shortcut, event| {
+                        if shortcut == &shift_1_shortcut {
+                            match event.state() {
+                                ShortcutState::Pressed => {
+                                    let mut window_main = None;
+                                    for (_label, window) in app_handle.webview_windows() {
+                                        if _label.as_str().starts_with("main") {
+                                            window_main = window.clone().into();
+                                        } else{
+                                            return;
+                                        }
+                                    }
+                                    if let Some(window) = window_main {
+                                        let _ = window.emit("lockscreen-action", "notification");
+                                    } else {
+                                        return;
+                                    }
+                                }
+                                ShortcutState::Released => {
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(),
+            )?;
+            app.global_shortcut().register(shift_1_shortcut)?;
+                
+            let dir = ensure_dir(app.handle())?;
+            allow_dir_on_scope(app.handle(), &dir)?;
+            if let Some(window) = app.get_webview_window("main") {
+                apply_default_window_icon(app.handle(), &window);
+                let _ = window.center();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            let tray_menu = MenuBuilder::new(app)
+                .text("tray_show", "显示主界面")
+                .text("tray_hide", "隐藏到托盘")
+                .separator()
+                .text("tray_quit", "退出")
+                .build()?;
+
+            let tray = TrayIconBuilder::new()
+                .icon(TRAY_ICON.clone())
+                .tooltip("护眼吧")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    let app = tray.app_handle();
+                    let Some(window) = app.get_webview_window("main") else {
+                        return;
+                    };
+                    match event {
+                        TrayIconEvent::Click {
+                            button,
+                            button_state,
+                            ..
+                        } => {
+                            if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        TrayIconEvent::DoubleClick { button, .. } => {
+                            if button == MouseButton::Left {
+                                let visible = window.is_visible().unwrap_or(true);
+                                if visible {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_menu_event(|app, event| {
+                    let Some(window) = app.get_webview_window("main") else {
+                        return;
+                    };
+                    match event.id().as_ref() {
+                        "tray_show" => {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        "tray_hide" => {
+                            let _ = window.hide();
+                        }
+                        "tray_quit" => {
+                            if let Some(state) = app.try_state::<AppState>() {
+                                state.allow_exit.store(true, Ordering::SeqCst);
+                            }
+                            let _ = apply_gamma(1.0, 1.0, 1.0);
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
+            app.manage(tray);
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    if let Some(state) = window.app_handle().try_state::<AppState>() {
+                        if !state.allow_exit.load(Ordering::SeqCst) {
+                            let _ = window.hide();
+                            api.prevent_close();
+                            return;
+                        }
+                    }
+                    let _ = apply_gamma(1.0, 1.0, 1.0);
+                }
+                WindowEvent::Destroyed => {
+                    let _ = apply_gamma(1.0, 1.0, 1.0);
+                }
+                _ => {}
+            }
+        })
+        .manage(LockState::default())
+        .manage(AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            set_gamma,
+            get_gamma,
+            lockscreen_action,
+            show_lock_windows,
+            hide_lock_windows,
+            show_notification_windows,
+            hide_notification_windows,
+            log_app
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
