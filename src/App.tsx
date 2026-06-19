@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -30,20 +29,11 @@ function formatDuration2(totalSeconds: number) {
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
-  const isNotificationWindow =
-    new URLSearchParams(window.location.search).get("notification") === "1";
   const now = new Date();
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
   // 休息节奏开关
   const [restEnabled, setRestEnabled] = useState(true);
-  // 定时休息快捷键
-  const [autoKeyEnabled, setAutoKeyEnabled] = useState(true);
-  const [autoKeyMsg, setAutoKeyMsg] = useState("");
-  // 强度
-  const [filterStrength, setFilterStrength] = useState(30);
-  // 色调
-  const [colorTemp, setColorTemp] = useState(4700);
   // 休息间隔
   const [restMinutes, setRestMinutes] = useState(60);
   // 休息时间
@@ -54,7 +44,6 @@ function App() {
   const [preRestTimes, setPreRestTimes] = useState(0);
   // 显示锁屏弹框
   const [showLockScreen, setShowLockScreen] = useState(false);
-  const [activePreset, setActivePreset] = useState("智能");
   // 下一次休息时间
   const [nextMinutesAt, setNextMinutesAt] = useState<Date | null>(null);
   // 休息结束时间（未弹出锁屏窗口前）
@@ -68,54 +57,6 @@ function App() {
   // 休息结束时间（已弹出锁屏窗口）
   const [lockEndAtMs, setLockEndAtMs] = useState<number | null>(null);
 
-  const presets = useMemo(
-    () => ({
-      智能: {
-        day: { temp: 4700, strength: 30 },
-        night: { temp: 3400, strength: 30 },
-      },
-      自设: {
-        day: { temp: 5200, strength: 50 },
-        night: { temp: 4700, strength: 60 },
-      },
-      办公: {
-        day: { temp: 5200, strength: 50 },
-        night: { temp: 4700, strength: 60 },
-      },
-      影视: {
-        day: { temp: 5600, strength: 45 },
-        night: { temp: 5200, strength: 55 },
-      },
-      游戏: {
-        day: { temp: 6000, strength: 35 },
-        night: { temp: 5600, strength: 45 },
-      },
-    }),
-    [],
-  );
-
-  const isDaytime = now.getHours() >= 6 && now.getHours() < 18;
-  const resolvePreset = useCallback(
-    (preset: keyof typeof presets) => {
-      const config = presets[preset];
-      if (!config) {
-        return { temp: 4700, strength: 30 };
-      }
-      if (preset === "智能") {
-        return isDaytime ? config.day : config.night;
-      }
-      return config.day;
-    },
-    [isDaytime, presets],
-  );
-
-  useEffect(() => {
-    if (activePreset !== "智能") return;
-    const next = resolvePreset("智能");
-    setFilterStrength(next.strength);
-    setColorTemp(next.temp);
-  }, [activePreset, resolvePreset]);
-
   const restDuraAt = () => {
     return new Date(Date.now() + restDuration * 60 * 1000);
   };
@@ -126,7 +67,6 @@ function App() {
   
   const handleStartRest = useCallback(() => {
     if (localStorage.getItem("restEnabled") !== "true") return;
-    if (isNotificationWindow) return;
     setEndDurationAt(restDuraAt());
     changeShowLockScreen(true);
     showLockWindows();
@@ -158,8 +98,6 @@ function App() {
       .listen<string>("lockscreen-action", (event) => {
         if (event.payload === "exit") {
           handleExitRest();
-        } else if (event.payload === "notification") {
-          registerKey();
         }
       })
       .then((fn) => {
@@ -192,13 +130,6 @@ function App() {
     const end = Number(params.get("end") || 0);
     setLockEndAtMs(end > 0 ? end : null);
   }, [isLockWindow]);
-  
-  useEffect(() => {
-    if (!isNotificationWindow) return;
-    const params = new URLSearchParams(window.location.search);
-    const message = params.get("message") || "休息一下，放松眼睛";
-    setAutoKeyMsg(message);
-  }, [isNotificationWindow]);
   
   useEffect(() => {
     if (!isLockWindow) return;
@@ -248,26 +179,6 @@ function App() {
     }
   }, [now, restEnabled, nextMinutesAt, restDuration, showLockScreen]);
   
-  const registerKey = () => {
-    if (localStorage.getItem("autoKeyEnabled") !== "true") return;
-    if (localStorage.getItem("showLockScreen") === "true") return;
-    if (isLockWindow) return;
-    if (isNotificationWindow) return;
-    const restEnabled = localStorage.getItem("restEnabled") === "true";
-    const message = restEnabled ? "关闭功能" : "开启功能";
-    changeRestEnabled(!restEnabled);
-    
-    invoke("show_notification_windows", {
-      message: message,
-    }).then(() => {
-      setTimeout(() => {
-        invoke("hide_notification_windows").catch((error) =>
-          console.error("通知窗口关闭失败", error)
-        );
-      }, 2000);
-    }).catch((error) => console.error("通知窗口开启失败", error));
-  }
-  
   useEffect(() => {
     const filterEnabled = localStorage.getItem("filterEnabled");
     if (filterEnabled === null || filterEnabled === "true") {
@@ -287,44 +198,11 @@ function App() {
       localStorage.setItem("restEnabled", "false");
     }
     
-    const preset = localStorage.getItem("preset");
-    if (preset !== null) {
-      setActivePreset(String(preset));
-    } else {
-      setActivePreset("智能");
-      localStorage.setItem("preset", "智能");
-    }
-    if (preset === "自设") {
-      const filterStrength = localStorage.getItem("filterStrength");
-      if (filterStrength !== null) {
-        setFilterStrength(Number(filterStrength));
-      } else {
-        setFilterStrength(30);
-        localStorage.setItem("filterStrength", "30");
-      }
-      const colorTemp = localStorage.getItem("colorTemp");
-      if (colorTemp !== null) {
-        setColorTemp(Number(colorTemp));
-      } else {
-        setColorTemp(4700);
-        localStorage.setItem("colorTemp", "4700");
-      }
-    }
-    
     const showLockScreen = localStorage.getItem("showLockScreen") === "true";
     if (showLockScreen) {
       changeShowLockScreen(true);
     } else {
       changeShowLockScreen(false);
-    }
-        
-    const autoKeyEnabled = localStorage.getItem("autoKeyEnabled");
-    if (autoKeyEnabled === null || autoKeyEnabled === "true") {
-      setAutoKeyEnabled(true);
-      localStorage.setItem("autoKeyEnabled", "true");
-    } else {
-      setAutoKeyEnabled(false);
-      localStorage.setItem("autoKeyEnabled", "false");
     }
     
     const restMinutes = localStorage.getItem("restMinutes");
@@ -365,11 +243,6 @@ function App() {
     localStorage.setItem("restTimes", JSON.stringify(obj));
   }, []);
   
-  const changeAutoKeyEnabled = (val: boolean) => {
-      setAutoKeyEnabled(val);
-      localStorage.setItem("autoKeyEnabled", String(val));
-  }
-  
   const changeFilterEnabled = (val: boolean) => {
       setFilterEnabled(val);
       localStorage.setItem("filterEnabled", String(val));
@@ -383,31 +256,6 @@ function App() {
   const changeShowLockScreen = (val: boolean) => {
       setShowLockScreen(val);
       localStorage.setItem("showLockScreen", String(val));
-  }
-  
-  const changeFilterStrength = (val: number) => {
-      setFilterStrength(val);
-      if (activePreset !== "自设") return;
-      localStorage.setItem("filterStrength", String(val));
-  }
-  
-  const changeColorTemp = (val: number) => {
-      setColorTemp(val);
-      if (activePreset !== "自设") return;
-      localStorage.setItem("colorTemp", String(val));
-  }
-  
-  const changePreset = (preset: "智能" | "自设" | "办公" | "影视" | "游戏") => {
-      setActivePreset(preset);
-      localStorage.setItem("preset", String(preset));
-      const next = resolvePreset(preset);
-      
-      setFilterStrength(next.strength);
-      setColorTemp(next.temp);
-      setFilterEnabled(true);
-      if (preset !== "自设") return;
-      localStorage.setItem("filterStrength", String(next.strength));
-      localStorage.setItem("colorTemp", String(next.temp));
   }
   
   const changeRestMinutes = (val: number) => {
@@ -483,7 +331,7 @@ function App() {
 
   return (
     <div className="app">
-      {!isLockWindow && !isNotificationWindow && (
+      {!isLockWindow && (
         <>
           <div className="ambient ambient--one" />
           <div className="ambient ambient--two" />
@@ -527,72 +375,6 @@ function App() {
             </section>
 
             <section className="main-grid">
-            {filterEnabled && (
-              <div className="card">
-                <div className="card__header">
-                  <div>
-                    <p className="card__eyebrow">护眼滤镜</p>
-                    <h2>过滤蓝光</h2>
-                  </div>
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={filterEnabled}
-                      onChange={() => {}}
-                      onClick={() => changeFilterEnabled(!filterEnabled)}
-                    />
-                    <span className="toggle__track" />
-                  </label>
-                </div>
-
-                <div className="slider-group">
-                  <div className="slider-row">
-                    <span>强度</span>
-                    <span>{filterStrength}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={filterStrength}
-                    onChange={(event) =>
-                      changeFilterStrength(Number(event.target.value))
-                    }
-                  />
-                </div>
-
-                <div className="chips">
-                  {(Object.keys(presets) as Array<keyof typeof presets>).map(
-                    (preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        className={`chip ${
-                          activePreset === preset ? "chip--active" : ""
-                        }`}
-                        onClick={() => changePreset(preset)}>
-                        {preset}
-                      </button>
-                    ),
-                  )}
-                </div>
-
-                <div className="slider-group">
-                  <div className="slider-row">
-                    <span>色调</span>
-                    <span>{colorTemp}K</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={-3000}
-                    max={10000}
-                    step={100}
-                    value={colorTemp}
-                    onChange={(event) => changeColorTemp(Number(event.target.value))}
-                  />
-                </div>
-              </div>
-            )}
               <div className="card">
                 <div className="card__header">
                   <div>
@@ -691,13 +473,13 @@ function App() {
                   </label>
 
                   <label className="setting-row">
-                    <span>定时休息快捷键（Alt + Shift + 1）</span>
+                    <span>定时快捷键</span>
                     <label className="toggle">
                       <input
                         type="checkbox"
-                        checked={autoKeyEnabled}
+                        checked={filterEnabled}
                         onChange={() => {}}
-                        onClick={() => changeAutoKeyEnabled(!autoKeyEnabled)}
+                        onClick={() => changeFilterEnabled(!filterEnabled)}
                       />
                       <span className="toggle__track" />
                     </label>
@@ -741,14 +523,6 @@ function App() {
                 跳过休息
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      
-      {isNotificationWindow && (
-        <div className="notification">
-          <div className="notification__center">
-            <p>{autoKeyMsg}</p>
           </div>
         </div>
       )}

@@ -126,83 +126,6 @@ fn hide_lock_windows(
 }
 
 #[tauri::command]
-async fn show_notification_windows(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, LockState>,
-    message: String,
-) -> Result<(), String> {
-    let start = Instant::now();
-    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
-    if !labels.is_empty() {
-        for label in labels.iter() {
-            if let Some(window) = app.get_webview_window(label) {
-                let _ = window.set_always_on_top(true);
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }
-        return Ok(());
-    }
-
-    let monitors = app.available_monitors().map_err(|err| err.to_string())?;
-    append_app_log(&app, &format!("通知创建开始 monitors={}", monitors.len()));
-    for (index, _monitor) in monitors.into_iter().enumerate() {
-        let label = format!("notification-{}", index);
-
-        let url = format!("index.html?notification=1&message={}", message,);
-        let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
-            .decorations(false)
-            .transparent(false)
-            .resizable(true)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .inner_size(200.0, 100.0)
-            .center()
-            .build()
-            .map_err(|err| err.to_string())?;
-
-        apply_default_window_icon(&app, &window);
-        let _ = window.set_fullscreen(false);
-        let _ = window.set_focus();
-        labels.push(label);
-    }
-
-    append_app_log(
-        &app,
-        &format!(
-            "通知创建完成 labels={} elapsed_ms={}",
-            labels.len(),
-            start.elapsed().as_millis()
-        ),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-fn hide_notification_windows(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, LockState>,
-) -> Result<(), String> {
-    let start = Instant::now();
-    let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
-    append_app_log(&app, &format!("通知关闭开始 labels={}", labels.len()));
-    for label in labels.iter() {
-        if !label.as_str().starts_with("notification-") {
-            continue;
-        }
-        if let Some(window) = app.get_webview_window(label) {
-            let _ = window.close();
-        }
-    }
-    labels.clear();
-    append_app_log(
-        &app,
-        &format!("通知关闭完成 {}ms", start.elapsed().as_millis()),
-    );
-    Ok(())
-}
-
-#[tauri::command]
 fn lockscreen_action(app: tauri::AppHandle, action: String) -> Result<(), String> {
     append_app_log(&app, &format!("锁屏动作: {}", action));
     for (_label, window) in app.webview_windows() {
@@ -421,8 +344,6 @@ pub fn run() {
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,
-            show_notification_windows,
-            hide_notification_windows,
             log_app
         ])
         .run(tauri::generate_context!())
