@@ -29,6 +29,12 @@ function formatDuration2(totalSeconds: number) {
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
+    
+  // 内容
+  const [value, setValue] = useState('')
+  const handleChange = (e) => {
+   setValue(e.target.value); // 2. 更新状态
+  };
   const now = new Date();
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
@@ -432,16 +438,12 @@ function App() {
       )}
       
       {isLockWindow && (
-        <div
-          className="lockscreen"
-        >
-          <div className="lockscreen__content">
-            <input
-              type="text"
-              value={lockPayload.restCountdown}
-              onChange={() => changeFilterEnabled(!filterEnabled)}
-            />
-          </div>
+        <div className="lockscreen">
+          <input
+            type="text"
+            value={value}
+            onChange={handleChange}
+          />
         </div>
       )}
     </div>
