@@ -6,7 +6,6 @@ import {
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
-import { onLock } from 'tauri-plugin-idlemonitor-api';
 import "./App.css";
 
 function pad2(value: number) {
@@ -33,11 +32,9 @@ function App() {
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
   const isNotificationWindow =
     new URLSearchParams(window.location.search).get("notification") === "1";
-  const [now, setNow] = useState(new Date());
+  const now = new Date();
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
-  // 开机自启
-  const [startupEnabled, setStartupEnabled] = useState(false);
   // 休息节奏开关
   const [restEnabled, setRestEnabled] = useState(true);
   // 定时休息快捷键
@@ -70,8 +67,6 @@ function App() {
   });
   // 休息结束时间（已弹出锁屏窗口）
   const [lockEndAtMs, setLockEndAtMs] = useState<number | null>(null);
-  // windows系统锁屏状态
-  const [windowsLocked, setWindowsLocked] = useState(false);
 
   const presets = useMemo(
     () => ({
@@ -151,35 +146,6 @@ function App() {
     );
   }
   
-  const checkTime = (restTimes: number) => {
-    if (restTimes === 0) return;
-    const localTimes = localStorage.getItem("restTimes");
-    if (localTimes !== null) {
-      const date = new Date().getDate();
-      const obj = JSON.parse((localTimes as string));
-      if (!obj[date]) {
-        obj[date] = {times: 0};
-        setRestTimes(0);
-      }
-    }
-  }
-    
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    const setupIdleMonitoring = async () => {
-      unlisten = await onLock((payload) => {
-        if (payload.locked) {
-          setWindowsLocked(true);
-          checkTime(restTimes);
-        } else {
-          setWindowsLocked(false);
-        }
-      })
-    }
-    setupIdleMonitoring()
-    return () => unlisten && unlisten();
-  }, [restTimes]);
-  
   useEffect(() => {
     if (!showLockScreen) return;
     setEndDurationAt(restDuraAt());
@@ -220,21 +186,6 @@ function App() {
     }
   }, [restEnabled]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-      if (restEnabled && !showLockScreen && windowsLocked) {
-        setNextMinutesAt((at: Date | null) => {
-          if (at) {
-            return new Date(at.getTime() + 1000)
-          }
-          return null;
-        });
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [windowsLocked, restEnabled, showLockScreen, setNextMinutesAt]);
-  
   useEffect(() => {
     const timer = setInterval(() => {
       if (localStorage.getItem("filterEnabled") !== "true") return;
@@ -325,13 +276,13 @@ function App() {
 
   useEffect(() => {
     if (!restEnabled || showLockScreen) return;
-    if (!nextMinutesAt || windowsLocked) return;
+    if (!nextMinutesAt) return;
     if (now.getTime() >= nextMinutesAt.getTime()) {
       setEndDurationAt(restDuraAt());
       changeShowLockScreen(true);
       showLockWindows();
     }
-  }, [now, restEnabled, nextMinutesAt, restDuration, showLockScreen, windowsLocked]);
+  }, [now, restEnabled, nextMinutesAt, restDuration, showLockScreen]);
   
   const registerKey = () => {
     if (localStorage.getItem("autoKeyEnabled") !== "true") return;

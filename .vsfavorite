@@ -4,15 +4,15 @@
       "filePath": "src\\App.tsx",
       "bookmarks": [
         {
-          "lineNumber": 177,
+          "lineNumber": 160,
           "content": "event.payload === \"exit\""
         },
         {
-          "lineNumber": 241,
+          "lineNumber": 209,
           "content": "restTimes 1"
         },
         {
-          "lineNumber": 244,
+          "lineNumber": 212,
           "content": "每小时检查一次"
         }
       ],
