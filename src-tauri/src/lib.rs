@@ -256,7 +256,7 @@ fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
     file = File::options().append(true).open(&target_file)?;
     println!("ℹ️ 文件已存在，直接写入内容");
     
-    let line = format!(" {}\n", message);
+    let line = format!("{} \n", message);
     let _ = write!(file, "{}", line);
     Ok(())
 }

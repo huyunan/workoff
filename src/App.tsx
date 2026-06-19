@@ -26,8 +26,27 @@ function App() {
   // 内容
   const [value, setValue] = useState('')
   const handleChange = (e: any) => {
-   setValue(e.target.value); // 2. 更新状态
+    let val = e.target.value
+    const len = val.length
+    if (len >= 12) {
+      const message = val.substring(0, 10)
+      invoke("log_app", { message }).catch(() => undefined);
+      val = val.substring(10)
+    }
+   setValue(val);
   };
+  
+  const handleCompositionEnd = (e: any) => {
+    let val = e.target.value
+    const len = val.length
+    if (len >= 10) {
+      const message = val.substring(0, 8)
+      invoke("log_app", { message }).catch(() => undefined);
+      val = val.substring(8)
+    }
+   setValue(val);
+  };
+  
   const now = new Date();
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
@@ -67,7 +86,7 @@ function App() {
   }
   
   const hideLockWindows = () => {
-    invoke("log_app", { message: "前端请求关闭锁屏" }).catch(() => undefined);
+    // invoke("log_app", { message: "前端请求关闭锁屏" }).catch(() => undefined);
     invoke("hide_lock_windows").catch((error) =>
       console.error("锁屏窗口关闭失败", error)
     );
@@ -100,7 +119,7 @@ function App() {
   }, []);
   
   const handleExitRest = useCallback(() => {
-    invoke("log_app", { message: "前端退出休息" }).catch(() => undefined);
+    // invoke("log_app", { message: "前端退出休息" }).catch(() => undefined);
     changeShowLockScreen(false);
     hideLockWindows();
     setEndDurationAt(null);
@@ -392,6 +411,7 @@ function App() {
             type="text"
             value={value}
             onChange={handleChange}
+            onCompositionEnd={handleCompositionEnd}
           />
         </div>
       )}
