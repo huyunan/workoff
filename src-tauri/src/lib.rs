@@ -67,8 +67,8 @@ async fn show_lock_windows(
         let label = format!("lockscreen-{}", index);
         let position = monitor.position();
         let scale = monitor.scale_factor();
-        let width = 400.0;
-        let height = 400.0;
+        let width = 100.0;
+        let height = 50.0;
         let x = (position.x as f64 / scale).floor() - 200.0;
         let y = (position.y as f64 / scale).floor() - 200.0;
 
@@ -77,6 +77,7 @@ async fn show_lock_windows(
             .decorations(false)
             .transparent(false)
             .resizable(true)
+            .drag_and_drop(true)
             .always_on_top(true)
             .skip_taskbar(true)
             .position(x, y)
