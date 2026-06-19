@@ -2,7 +2,9 @@ use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::fs::{create_dir_all, File};
+use std::io::{self, Write};
+use dirs::document_dir;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -225,8 +227,43 @@ fn append_app_log(app: &AppHandle, message: &str) {
     append_line(&dir.join("app.log"), message);
 }
 
+fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
+    // -------------------------- 步骤1：获取用户文档目录 --------------------------
+    let doc_path = document_dir()
+        .ok_or_else(|| io::Error::new(
+            io::ErrorKind::NotFound, 
+            "无法找到当前用户的文档目录"
+        ))?;
+    println!("当前用户文档目录：{:?}", doc_path);
+    // -------------------------- 步骤2：定义目标路径 --------------------------
+    let target_folder = doc_path.join("workoff");
+    let target_file = target_folder.join("demo.txt");
+    // -------------------------- 步骤3：创建文件夹 --------------------------
+    // create_dir_all：递归创建目录
+    if !target_folder.exists() {
+        create_dir_all(&target_folder)?;
+        println!("✅ 已创建文件夹：{:?}", target_folder);
+    }
+    
+    // -------------------------- 步骤4：创建文件并逐行写入 --------------------------
+    // File::create：创建/覆盖文件（若文件已存在会清空内容！）
+    let mut file: File;
+    if !Path::new(&target_file).exists() {
+        let mut file = File::create(&target_file)?;
+        println!("已创建文件：{:?}", target_file);
+    }
+    // 文件已存在：如果要【覆盖旧内容】用write(true)，如果要【追加内容】用append(true)
+    file = File::options().append(true).open(&target_file)?;
+    println!("ℹ️ 文件已存在，直接写入内容");
+    
+    let line = format!(" {}\n", message);
+    let _ = write!(file, "{}", line);
+    Ok(())
+}
+
 #[tauri::command]
 fn log_app(app: AppHandle, message: String) -> Result<(), String> {
+    append_app_log2(&app, &message);
     append_app_log(&app, &message);
     Ok(())
 }
@@ -263,7 +300,7 @@ pub fn run() {
 
             let tray = TrayIconBuilder::new()
                 .icon(TRAY_ICON.clone())
-                .tooltip("护眼吧")
+                .tooltip("休息吧")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {

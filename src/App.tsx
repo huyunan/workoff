@@ -256,7 +256,7 @@ function App() {
           <header className="topbar">
             <div className="brand">
               <div>
-                <p className="brand__name">护眼吧</p>
+                <p className="brand__name">休息吧</p>
                 <p className="brand__tag">清醒护眼 · 专注节奏</p>
               </div>
             </div>
