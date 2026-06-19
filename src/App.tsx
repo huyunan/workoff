@@ -38,10 +38,6 @@ function App() {
   const [restMinutes, setRestMinutes] = useState(60);
   // 休息时间
   const [restDuration, setRestDuration] = useState(3);
-  // 今日休息次数
-  const [restTimes, setRestTimes] = useState(0);
-  // 昨日休息次数
-  const [preRestTimes, setPreRestTimes] = useState(0);
   // 显示锁屏弹框
   const [showLockScreen, setShowLockScreen] = useState(false);
   // 下一次休息时间
@@ -220,27 +216,6 @@ function App() {
       setRestDuration(3);
       localStorage.setItem("restDuration", "3");
     }
-    
-    const restTimes = localStorage.getItem("restTimes");
-    const newDate = new Date();
-    const date = newDate.getDate();
-    newDate.setDate(newDate.getDate() - 1);
-    const preDate = newDate.getDate();
-    let obj = {[date]: {times: 0}, [preDate]: {times: 0}};
-    if (restTimes !== null) {
-      const obj2 = JSON.parse((restTimes as string));
-      if (!obj2[date]) {
-        obj2[date] = {times: 0};
-      }
-      if (!obj2[preDate]) {
-        obj2[preDate] = {times: 0};
-      }
-      setRestTimes(Number(obj2[date].times));
-      setPreRestTimes(Number(obj2[preDate].times));
-      obj[date] = obj2[date];
-      obj[preDate] = obj2[preDate];
-    }
-    localStorage.setItem("restTimes", JSON.stringify(obj));
   }, []);
   
   const changeFilterEnabled = (val: boolean) => {
@@ -290,20 +265,6 @@ function App() {
     if (!showLockScreen || !endDurationAt) return;
     if (now.getTime() >= endDurationAt.getTime()) {
       handleExitRest();
-      const restTimes = localStorage.getItem("restTimes");
-      if (restTimes === null) return;
-      const date = new Date().getDate();
-      const obj = JSON.parse((restTimes as string));
-      if (!obj[date]) {
-        obj[date] = {times: 0};
-        setRestTimes(0);
-      }
-      setRestTimes((times) => {
-        const next = times + 1;
-        obj[date] = {times: next};
-        localStorage.setItem("restTimes", JSON.stringify(obj));
-        return next;
-      });
     }
   }, [handleExitRest, now, endDurationAt, showLockScreen]);
 
@@ -353,27 +314,6 @@ function App() {
           </header>
 
           <>
-            <section className="hero">
-              <div className="hero__text">
-                <p className="hero__kicker">今日护眼状态</p>
-                <h1>保持专注，但别忘了休息一下眼睛。</h1>
-                <div className="hero__stats">
-                  <div>
-                    <p className="stat__label">今日休息次数</p>
-                    <p className="stat__value">{restTimes} 次</p>
-                  </div>
-                  <div>
-                    <p className="stat__label">昨日休息次数</p>
-                    <p className="stat__value">{preRestTimes} 次</p>
-                  </div>
-                  <div>
-                    <p className="stat__label">下一次休息</p>
-                    <p className="stat__value">{nextRestCountdown}</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
             <section className="main-grid">
               <div className="card">
                 <div className="card__header">
@@ -495,34 +435,12 @@ function App() {
         <div
           className="lockscreen"
         >
-          <div className="lockscreen__scrim" />
           <div className="lockscreen__content">
-            <div className="lockscreen__top">
-              <div>
-                <p className="lockscreen__time">{lockPayload.timeText}</p>
-                <p className="lockscreen__date">{lockPayload.dateText}</p>
-              </div>
-              <div />
-            </div>
-            <div className="lockscreen__center">
-              <p>休息一下，放松眼睛</p>
-              <div className="lockscreen__timer">
-                <div className="lockscreen__timer-value">
-                  {lockPayload.restCountdown.replaceAll(":", " : ")}
-                </div>
-              </div>
-              <button
-                className="view-tab"
-                type="button"
-                onClick={() => {
-                  invoke("lockscreen_action", {action: "exit"}).catch((error) =>
-                    console.error("锁屏窗口关闭失败", error)
-                  )}
-                }
-              >
-                跳过休息
-              </button>
-            </div>
+            <input
+              type="text"
+              value={lockPayload.restCountdown}
+              onChange={() => changeFilterEnabled(!filterEnabled)}
+            />
           </div>
         </div>
       )}
