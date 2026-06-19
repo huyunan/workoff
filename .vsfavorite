@@ -8,11 +8,11 @@
           "content": "event.payload === \"exit\""
         },
         {
-          "lineNumber": 209,
+          "lineNumber": 194,
           "content": "restTimes 1"
         },
         {
-          "lineNumber": 212,
+          "lineNumber": 197,
           "content": "每小时检查一次"
         }
       ],

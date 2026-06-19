@@ -15,10 +15,6 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
-use windows::Win32::UI::ColorSystem::SetDeviceGammaRamp;
-use windows::Win32::UI::ColorSystem::GetDeviceGammaRamp;
 
 #[derive(Default)]
 struct LockState {
@@ -46,143 +42,6 @@ struct RestStorageSettings {
     is_default: bool,
 }
 
-fn clamp(value: f64, min: f64, max: f64) -> f64 {
-    if value < min {
-        min
-    } else if value > max {
-        max
-    } else {
-        value
-    }
-}
-
-fn temperature_to_rgb(temp: f64) -> (f64, f64, f64) {
-    let temp = clamp(temp, -3000.0, 10000.0) / 100.0;
-    let (mut r, mut g, mut b);
-    if temp <= 66.0 {
-        r = 255.0;
-        g = 99.4708025861 * temp.ln() - 161.1195681661;
-        b = if temp <= 19.0 {
-            0.0
-        } else {
-            138.5177312231 * (temp - 10.0).ln() - 305.0447927307
-        };
-    } else {
-        r = 329.698727446 * (temp - 60.0).powf(-0.1332047592);
-        g = 288.1221695283 * (temp - 60.0).powf(-0.0755148492);
-        b = 255.0;
-    }
-
-    r = clamp(r, 0.0, 255.0);
-    g = clamp(g, 0.0, 255.0);
-    b = clamp(b, 0.0, 255.0);
-    (r / 255.0, g / 255.0, b / 255.0)
-}
-
-fn apply_gamma(mult_r: f64, mult_g: f64, mult_b: f64) -> Result<(), String> {
-    unsafe {
-        let hdc = GetDC(HWND(0));
-        if hdc.0 == 0 {
-            return Err("无法获取显示设备句柄".into());
-        }
-
-        let mut ramp = [0u16; 256 * 3];
-        for i in 0..256 {
-            let base = i as f64 / 255.0;
-            ramp[i] = clamp(base * 65535.0 * mult_r, 0.0, 65535.0).round() as u16;
-            ramp[i + 256] = clamp(base * 65535.0 * mult_g, 0.0, 65535.0).round() as u16;
-            ramp[i + 512] = clamp(base * 65535.0 * mult_b, 0.0, 65535.0).round() as u16;
-        }
-
-        let ok = SetDeviceGammaRamp(hdc, ramp.as_ptr() as *const _).as_bool();
-        ReleaseDC(HWND(0), hdc);
-        if !ok {
-            return Err("设置色温失败".into());
-        }
-    }
-    Ok(())
-}
-
-#[repr(C)]
-struct GammaRamp {
-    red: [u16; 256],
-    green: [u16; 256],
-    blue: [u16; 256],
-}
-
-fn is_eye_protection_off(ramp: &GammaRamp) -> bool {
-    // 标准伽马 ramp 应该是线性的（近似）
-    // 检查 R、G、B 通道是否大致一致且呈线性增长
-    let mut is_linear = true;
-    
-    // 检查关键点的线性度
-    for i in (0..256).step_by(32) {
-        let expected = (i * 65535 / 255) as u16;
-        let tolerance = 1000; // 允许的误差范围
-        
-        if (ramp.red[i] as i32 - expected as i32).abs() > tolerance ||
-           (ramp.green[i] as i32 - expected as i32).abs() > tolerance ||
-           (ramp.blue[i] as i32 - expected as i32).abs() > tolerance {
-            is_linear = false;
-            break;
-        }
-    }
-    
-    // 检查 RGB 通道是否平衡（护眼模式通常会降低蓝色通道）
-    let mid = 128;
-    let red_mid = ramp.red[mid];
-    let green_mid = ramp.green[mid];
-    let blue_mid = ramp.blue[mid];
-    
-    let rgb_balance = (red_mid as i32 - green_mid as i32).abs() < 500 &&
-                      (green_mid as i32 - blue_mid as i32).abs() < 500;
-    
-    is_linear && rgb_balance
-}
-
-#[tauri::command]
-fn get_gamma(filter_enabled: bool, strength: f64, color_temp: f64) -> Result<(), String> {
-    let mut ramp: GammaRamp = unsafe { std::mem::zeroed() };
-
-    unsafe {
-        let hdc = GetDC(HWND(0));
-        if hdc.0 == 0 {
-            return Err("无法获取显示设备句柄".into());
-        }
-        let ok = GetDeviceGammaRamp(hdc, &mut ramp as *mut _ as *mut _).as_bool();
-        ReleaseDC(HWND(0), hdc);
-        if !ok {
-            return Err("获取色温失败".into());
-        }
-        if is_eye_protection_off(&ramp) {
-            let _sg = set_gamma(filter_enabled, strength, color_temp);
-        }
-    }
-    // let ramp_string = format!("{:?}", ramp);
-    Ok(())
-}
-
-#[tauri::command]
-fn set_gamma(filter_enabled: bool, strength: f64, color_temp: f64) -> Result<(), String> {
-    if !filter_enabled {
-        return apply_gamma(1.0, 1.0, 1.0);
-    }
-    let (r, g, b) = temperature_to_rgb(color_temp);
-    let factor = clamp(strength / 100.0, 0.0, 1.0);
-    let mut mult_r = (1.0 - factor) + factor * r;
-    let mut mult_g = (1.0 - factor) + factor * g;
-    let mut mult_b = (1.0 - factor) + factor * b;
-
-    // Greenish bias to avoid reddish tint and reduce blue light.
-    let green_boost = 0.08 * factor;
-    let red_cut = 0.18 * factor;
-    let blue_cut = 0.35 * factor;
-    mult_r = clamp(mult_r * (1.0 - red_cut), 0.0, 1.0);
-    mult_g = clamp(mult_g * (1.0 + green_boost), 0.0, 1.0);
-    mult_b = clamp(mult_b * (1.0 - blue_cut), 0.0, 1.0);
-    apply_gamma(mult_r, mult_g, mult_b)
-}
-
 #[tauri::command]
 async fn show_lock_windows(
     app: tauri::AppHandle,
@@ -207,10 +66,9 @@ async fn show_lock_windows(
     for (index, monitor) in monitors.into_iter().enumerate() {
         let label = format!("lockscreen-{}", index);
         let position = monitor.position();
-        let size = monitor.size();
         let scale = monitor.scale_factor();
-        let width = (size.width as f64 / scale).ceil() + 400.0;
-        let height = (size.height as f64 / scale).ceil() + 400.0;
+        let width = 400.0;
+        let height = 400.0;
         let x = (position.x as f64 / scale).floor() - 200.0;
         let y = (position.y as f64 / scale).floor() - 200.0;
 
@@ -218,7 +76,7 @@ async fn show_lock_windows(
         let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
             .decorations(false)
             .transparent(false)
-            .resizable(false)
+            .resizable(true)
             .always_on_top(true)
             .skip_taskbar(true)
             .position(x, y)
@@ -227,7 +85,7 @@ async fn show_lock_windows(
             .map_err(|err| err.to_string())?;
 
         apply_default_window_icon(&app, &window);
-        let _ = window.set_fullscreen(true);
+        let _ = window.set_fullscreen(false);
         let _ = window.set_focus();
         labels.push(label);
     }
@@ -528,7 +386,6 @@ pub fn run() {
                             if let Some(state) = app.try_state::<AppState>() {
                                 state.allow_exit.store(true, Ordering::SeqCst);
                             }
-                            let _ = apply_gamma(1.0, 1.0, 1.0);
                             app.exit(0);
                         }
                         _ => {}
@@ -552,10 +409,8 @@ pub fn run() {
                             return;
                         }
                     }
-                    let _ = apply_gamma(1.0, 1.0, 1.0);
                 }
                 WindowEvent::Destroyed => {
-                    let _ = apply_gamma(1.0, 1.0, 1.0);
                 }
                 _ => {}
             }
@@ -563,8 +418,6 @@ pub fn run() {
         .manage(LockState::default())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            set_gamma,
-            get_gamma,
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,

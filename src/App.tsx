@@ -187,42 +187,6 @@ function App() {
   }, [restEnabled]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (localStorage.getItem("filterEnabled") !== "true") return;
-      const filterStrength = localStorage.getItem("filterStrength") || "30";
-      const colorTemp = localStorage.getItem("colorTemp") || "4700";
-      invoke("get_gamma", {
-        filterEnabled,
-        strength: Number(filterStrength),
-        colorTemp: Number(colorTemp),
-      }).catch(() => undefined);
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (isLockWindow) return;
-    if (isNotificationWindow) return;
-    let active = true;
-    const handle = setTimeout(() => {
-      if (localStorage.getItem("filterEnabled") !== "true") return;
-      invoke("set_gamma", {
-        filterEnabled,
-        strength: filterStrength,
-        colorTemp,
-      }).catch((error) => {
-        if (active) {
-          console.error("过滤蓝光设置失败", error);
-        }
-      });
-    }, 80);
-    return () => {
-      active = false;
-      clearTimeout(handle);
-    };
-  }, [isLockWindow, isNotificationWindow, filterEnabled, filterStrength, colorTemp]);
-
-  useEffect(() => {
     if (!isLockWindow) return;
     const params = new URLSearchParams(window.location.search);
     const end = Number(params.get("end") || 0);
@@ -693,7 +657,15 @@ function App() {
                   type="button"
                   onClick={handleStartRest}
                 >
-                  立即进入休息
+                  开启
+                </button>
+                
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={handleExitRest}
+                >
+                  关闭
                 </button>
               </div>
 
