@@ -19,20 +19,13 @@ function formatDuration(totalSeconds: number) {
   return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-function formatDuration2(totalSeconds: number) {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  return `${pad2(minutes)}:${pad2(seconds)}`;
-}
-
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
     
   // 内容
   const [value, setValue] = useState('')
-  const handleChange = (e) => {
+  const handleChange = (e: any) => {
    setValue(e.target.value); // 2. 更新状态
   };
   const now = new Date();
@@ -50,14 +43,6 @@ function App() {
   const [nextMinutesAt, setNextMinutesAt] = useState<Date | null>(null);
   // 休息结束时间（未弹出锁屏窗口前）
   const [endDurationAt, setEndDurationAt] = useState<Date | null>(null);
-  // 锁屏数据
-  const [lockPayload, setLockPayload] = useState({
-    timeText: "--:--",
-    dateText: "",
-    restCountdown: "00:00",
-  });
-  // 休息结束时间（已弹出锁屏窗口）
-  const [lockEndAtMs, setLockEndAtMs] = useState<number | null>(null);
 
   const restDuraAt = () => {
     return new Date(Date.now() + restDuration * 60 * 1000);
@@ -126,42 +111,6 @@ function App() {
     }
   }, [restEnabled]);
 
-  useEffect(() => {
-    if (!isLockWindow) return;
-    const params = new URLSearchParams(window.location.search);
-    const end = Number(params.get("end") || 0);
-    setLockEndAtMs(end > 0 ? end : null);
-  }, [isLockWindow]);
-  
-  useEffect(() => {
-    if (!isLockWindow) return;
-    const timer = setInterval(() => {
-      const nowValue = new Date();
-      const timeValue = nowValue.toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const dateValue = nowValue.toLocaleDateString("zh-CN", {
-        month: "long",
-        day: "numeric",
-        weekday: "short",
-      });
-
-      let countdown = "00:00";
-      if (lockEndAtMs) {
-        countdown = formatDuration2((lockEndAtMs - nowValue.getTime()) / 1000);
-      }
-
-      setLockPayload((prev) => ({
-        ...prev,
-        timeText: timeValue,
-        dateText: dateValue,
-        restCountdown: countdown,
-      }));
-    }, 500);
-    return () => clearInterval(timer);
-  }, [isLockWindow, lockEndAtMs]);
-  
   useEffect(() => {
     if (showLockScreen) return;
     if (!restEnabled) {

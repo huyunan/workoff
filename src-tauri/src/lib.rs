@@ -15,6 +15,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
+extern crate winapi;
+use winapi::um::winuser::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
 
 #[derive(Default)]
 struct LockState {
@@ -65,12 +67,14 @@ async fn show_lock_windows(
     append_app_log(&app, &format!("锁屏创建开始 monitors={}", monitors.len()));
     for (index, monitor) in monitors.into_iter().enumerate() {
         let label = format!("lockscreen-{}", index);
-        let position = monitor.position();
         let scale = monitor.scale_factor();
         let width = 80.0;
         let height = 30.0;
-        let x = (position.x as f64 / scale).floor() - 200.0;
-        let y = (position.y as f64 / scale).floor() - 200.0;
+        let width_all = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+        let height_all = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+        println!("Width: {}, Height: {}", width_all, height_all);
+        let x = ((width_all / 3) as f64 / scale).floor();
+        let y = (height_all as f64 / scale).floor() - 150.0;
 
         let url = format!("index.html?lockscreen=1&end={}", end_at_ms,);
         let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
@@ -79,6 +83,7 @@ async fn show_lock_windows(
             .resizable(true)
             .drag_and_drop(true)
             .inner_size(width, height)
+            .position(x, y)
             .build()
             .map_err(|err| err.to_string())?;
 
