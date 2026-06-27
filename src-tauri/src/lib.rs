@@ -1,12 +1,15 @@
-use std::env;
-use std::fs::{create_dir_all, File};
-use serde::{Deserialize, Serialize};
-use std::io::{self, Write};
 use dirs::document_dir;
-use std::path::{Path};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use serde_json::from_value;
+use std::env;
+use tauri_plugin_store::{ StoreExt };
+use std::fs::{create_dir_all, File};
+use std::io::{self, Write};
+use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex,LazyLock,
+    LazyLock, Mutex,
 };
 use tauri::{
     menu::MenuBuilder,
@@ -24,8 +27,7 @@ struct AppState {
     allow_exit: AtomicBool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config {
     screen_width: f64,
     screen_height: f64,
@@ -43,18 +45,10 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
         width: 80.0,
         height: 30.0,
         scale: 1.0,
-        x: 100.0,
-        y: 100.0,
+        x: -1.0,
+        y: -1.0,
     })
 });
-
-#[tauri::command]
-async fn get_default_size() -> Result<String, String> {
-    let json_str = serde_json::to_string(&*CONFIG)
-    .map_err(|err| err.to_string())?;
-    println!("get_default_size size: {}", json_str);
-    Ok(json_str)
-}
 
 #[tauri::command]
 async fn show_lock_windows(
@@ -132,10 +126,7 @@ fn lockscreen_action(app: tauri::AppHandle, action: String) -> Result<(), String
 fn append_app_log(message: &str) -> io::Result<()> {
     // -------------------------- 步骤1：获取用户文档目录 --------------------------
     let doc_path = document_dir()
-        .ok_or_else(|| io::Error::new(
-            io::ErrorKind::NotFound, 
-            "无法找到当前用户的文档目录"
-        ))?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "无法找到当前用户的文档目录"))?;
     // -------------------------- 步骤2：定义目标路径 --------------------------
     let target_folder = doc_path.join("workoff");
     let target_file = target_folder.join("demo.txt");
@@ -144,7 +135,7 @@ fn append_app_log(message: &str) -> io::Result<()> {
     if !target_folder.exists() {
         create_dir_all(&target_folder)?;
     }
-    
+
     // -------------------------- 步骤4：创建文件并逐行写入 --------------------------
     // File::create：创建/覆盖文件（若文件已存在会清空内容！）
     let mut file: File;
@@ -153,7 +144,7 @@ fn append_app_log(message: &str) -> io::Result<()> {
     }
     // 文件已存在：如果要【覆盖旧内容】用write(true)，如果要【追加内容】用append(true)
     file = File::options().append(true).open(&target_file)?;
-    
+
     let line = format!("{} \n", message);
     let _ = write!(file, "{}", line);
     Ok(())
@@ -177,21 +168,49 @@ fn apply_default_window_icon<R: tauri::Runtime>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             if let Ok(Some(monitor)) = app.primary_monitor() {
+                    // 动态获取或创建 store
+                let store = app.store("config.json")?;
+                // let store = app.get_store("config.json").ok_or("Store not loaded")?;
                 let size = monitor.size();
                 let mut config = CONFIG.lock().unwrap();
                 config.scale = monitor.scale_factor();
                 config.screen_width = (size.width as f64 / config.scale).floor() as f64;
                 config.screen_height = (size.height as f64 / config.scale).floor() as f64;
-                
-                config.x = (config.screen_width / 3.0).floor() as f64;
-                config.y = config.screen_height - 150.0;
-let json_str = serde_json::to_string(&*config)
-    .map_err(|err| err.to_string())?;
-println!("app size: {}", json_str);
+
+                if let Some(value) = store.get("screenInfo") {
+                    println!("store.get {}", value);
+                    // let json_str = serde_json::to_string(&value).unwrap();
+                    // println!("store.get json_str {}", json_str);
+                    let prev: Config = from_value(value.clone())
+                        .map_err(|e| format!("Failed to deserialize: {}", e))?;
+                    // let prev: Config = serde_json::from_str(&json_str).unwrap();
+                    println!("store.get Config {:?}", prev);
+                    if config.scale != prev.scale
+                        || config.screen_width != prev.screen_width
+                        || config.screen_height != prev.screen_height
+                        || prev.x == -1.0 {
+                        config.x = (config.screen_width / 3.0).floor() as f64;
+                        config.y = config.screen_height - 150.0;
+                        let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
+                        println!("app size: {}", json_str);
+                        
+                        store.set("screenInfo", json!({
+                            "screen_width": config.screen_width,
+                            "screen_height": config.screen_height,
+                            "width": config.width,
+                            "height": config.height,
+                            "scale": config.scale,
+                            "x": config.x,
+                            "y": config.y,
+                        }));
+                        store.save().map_err(|e| e.to_string())?;
+                    }
+                }
             }
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);
@@ -281,8 +300,7 @@ println!("app size: {}", json_str);
                         }
                     }
                 }
-                WindowEvent::Destroyed => {
-                }
+                WindowEvent::Destroyed => {}
                 _ => {}
             }
         })
@@ -292,7 +310,6 @@ println!("app size: {}", json_str);
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,
-            get_default_size,
             log_app
         ])
         .run(tauri::generate_context!())

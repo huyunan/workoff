@@ -7,6 +7,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TauriEvent } from '@tauri-apps/api/event'
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from '@tauri-apps/api/event';
+import { Store } from '@tauri-apps/plugin-store';
 import "./App.css";
 
 function App() {
@@ -47,44 +48,25 @@ function App() {
   
   // 获取全部屏幕尺寸
   const getScreenInfo = useCallback(async () => {
-    invoke('get_default_size').then((paylod: any) => {
-      const config = JSON.parse(paylod);
-      setSize((prev: any) => {
-        if (config.scale === prev.scale && config.screen_width === prev.screen_width
-          && config.screen_height === prev.screen_height
-        ) {
-          return prev
-        }
-        if (prev.x !== -1) {
-          return prev
-        }
-        setPosX(config.x);
-        setPosY(config.y);
-        return { ...prev, ...config };
-      });
+    const store = await Store.load('config.json');
+      // 读取
+    const screenInfo: string | undefined = await store.get('screenInfo');
+    if (!screenInfo) return
+    const config = JSON.parse(screenInfo);
+    setSize((prev: any) => {
+      if (config.scale === prev.scale && config.screen_width === prev.screen_width
+        && config.screen_height === prev.screen_height
+      ) {
+        return prev
+      }
+      if (prev.x !== -1) {
+        return prev
+      }
+      setPosX(config.x);
+      setPosY(config.y);
+      return { ...prev, ...config };
     });
   }, [setSize, setPosX, setPosY])
-  
-  const setStorageSize = useCallback(async () => {
-    await getScreenInfo();
-    const screenInfo = localStorage.getItem("screenInfo");
-    if (screenInfo === null) {
-      setPosX(size.x);
-      setPosY(size.y);
-      localStorage.setItem("screenInfo", JSON.stringify(size));
-    } else {
-      const info = JSON.parse(screenInfo);
-      if (info.scale == size.scale) {
-        setPosX(info.x);
-        setPosY(info.y);
-      } else {
-        const [x, y] = getNewPos(info.x, info.y);
-        setPosX(x);
-        setPosY(y);
-        localStorage.setItem("screenInfo", JSON.stringify(size));
-      }
-    }
-  }, [size])
   
   const saveStorageSize = useCallback(async () => {
     const screenInfo = localStorage.getItem("screenInfo");
@@ -182,7 +164,7 @@ function App() {
   
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<Config>('default-size', (event) => {
+    listen<ConfigType>('default-size', (event) => {
       console.log(
         `downloading ${event.payload}`
       );
@@ -204,7 +186,6 @@ function App() {
   }, []);
   
   useEffect(() => {
-    setStorageSize();
     const filterEnabled = localStorage.getItem("filterEnabled");
     if (filterEnabled === null || filterEnabled === "true") {
       setFilterEnabled(true);
