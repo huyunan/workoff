@@ -68,10 +68,13 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
             if config.scale != prev.scale
                 || config.screen_width != prev.screen_width
                 || config.screen_height != prev.screen_height
+                || config.width != prev.width
+                || config.height != prev.height
                 || prev.x == -1.0 {
                 config.x = (config.screen_width / 3.0).floor() as f64;
                 config.y = config.screen_height - 150.0;
-                let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
+                config.screen_width = config.screen_width - prev.width;
+                config.screen_height = config.screen_height - prev.width;
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -87,8 +90,8 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
         } else {
             config.x = (config.screen_width / 3.0).floor() as f64;
             config.y = config.screen_height - 150.0;
-            let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
-            
+            config.screen_width = config.screen_width - config.width;
+            config.screen_height = config.screen_height - config.height;
             store.set("screenInfo", json!({
                 "screen_width": config.screen_width,
                 "screen_height": config.screen_height,
@@ -129,11 +132,6 @@ async fn show_lock_windows(
         let height = size.height as f64;
         let x = size.x as f64;
         let y = size.y as f64;
-        let mut config = CONFIG.lock().unwrap();
-        config.width = size.width;
-        config.height = size.height;
-        config.x = size.x;
-        config.y = size.y;
     
         let url = format!("index.html?lockscreen=1&end={}", 33,);
         let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
