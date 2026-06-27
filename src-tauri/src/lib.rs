@@ -52,7 +52,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
 async fn get_default_size() -> Result<String, String> {
     let json_str = serde_json::to_string(&*CONFIG)
     .map_err(|err| err.to_string())?;
-    println!("size: {}", json_str);
+    println!("get_default_size size: {}", json_str);
     Ok(json_str)
 }
 
@@ -191,7 +191,7 @@ pub fn run() {
                 config.y = config.screen_height - 150.0;
 let json_str = serde_json::to_string(&*config)
     .map_err(|err| err.to_string())?;
-println!("size: {}", json_str);
+println!("app size: {}", json_str);
             }
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);

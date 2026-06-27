@@ -24,42 +24,46 @@ function App() {
   // const [height, setHeight] = useState(30);
   // 显示锁屏弹框
   // const [showLockScreen, setShowLockScreen] = useState(false);
-  const defaultConfig = {
+  interface ConfigType {
+    screen_width: number;
+    screen_height: number;
+    width: number;
+    height: number;
+    scale: number;
+    x: number;
+    y: number;
+  }
+  
+  const defaultConfig: ConfigType = {
     screen_width: 1000.0,
     screen_height: 750.0,
     width: 80.0,
     height: 30.0,
     scale: 1.0,
-    x: 100.0,
-    y: 100.0,
+    x: -1,
+    y: -1,
   };
-  const [size, setSize] = useState(defaultConfig)
-  
-  type Config = {
-    screen_width: number,
-    screen_height: number,
-    width: number,
-    height: number,
-    scale: number,
-    x: number,
-    y: number,
-  }
+  const [size, setSize] = useState<ConfigType>(defaultConfig)
   
   // 获取全部屏幕尺寸
   const getScreenInfo = useCallback(async () => {
     invoke('get_default_size').then((paylod: any) => {
-    const config = JSON.parse(paylod);
-      setSize({
-        screen_width: config.screen_width,
-        screen_height: config.screen_height,
-        width: config.width,
-        height: config.height,
-        scale: config.scale,
-        x: config.x,
-        y: config.y,
-      })
+      const config = JSON.parse(paylod);
+      setSize((prev: any) => {
+        if (config.scale === prev.scale && config.screen_width === prev.screen_width
+          && config.screen_height === prev.screen_height
+        ) {
+          return prev
+        }
+        if (prev.x !== -1) {
+          return prev
+        }
+        setPosX(config.x);
+        setPosY(config.y);
+        return { ...prev, ...config };
+      });
     });
-  }, [setSize])
+  }, [setSize, setPosX, setPosY])
   
   const setStorageSize = useCallback(async () => {
     await getScreenInfo();
@@ -90,7 +94,7 @@ function App() {
       setPosY(size.y);
     }
     localStorage.setItem("screenInfo", JSON.stringify(size));
-  }, [size])
+  }, [size, setPosX, setPosY])
   
   const getNewPos = useCallback((oldx: any, oldy: any) => {
     let x = oldx, y = oldy;
@@ -216,22 +220,6 @@ function App() {
     } else {
       changeShowLockScreen(false);
     }
-    
-    const posX = localStorage.getItem("posX");
-    if (posX !== null) {
-      setPosX(Number(posX));
-    } else {
-      setPosX(60);
-      localStorage.setItem("posX", "60");
-    }
-    
-    const posY = localStorage.getItem("posY");
-    if (posY !== null) {
-      setPosY(Number(posY));
-    } else {
-      setPosY(3);
-      localStorage.setItem("posY", "3");
-    }
   }, []);
   
   const changeFilterEnabled = (val: boolean) => {
@@ -248,7 +236,7 @@ function App() {
       setPosX(val);
       size.x = val;
       saveStorageSize();
-  }, [size])
+  }, [size, setPosX])
   
   const blurPosX = useCallback((val: number) => {
       if (val < 0) {
@@ -263,7 +251,7 @@ function App() {
       setPosY(val);
       size.y = val;
       saveStorageSize();
-  }, [size])
+  }, [size, setPosY])
   
   const blurPosY = useCallback((val: number) => {
       if (val < 0) {
