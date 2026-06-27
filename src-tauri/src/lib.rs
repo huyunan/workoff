@@ -6,7 +6,7 @@ use dirs::document_dir;
 use std::path::{Path};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex,
+    Mutex,LazyLock,
 };
 use tauri::{
     menu::MenuBuilder,
@@ -24,10 +24,9 @@ struct AppState {
     allow_exit: AtomicBool,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[derive(Default)]
-struct Config {
+pub struct Config {
     screen_width: f64,
     screen_height: f64,
     width: f64,
@@ -37,26 +36,31 @@ struct Config {
     y: f64,
 }
 
-const CONFIG: Config = Config {
-    screen_width: 1000.0,
-    screen_height: 750.0,
-    width: 80.0,
-    height: 30.0,
-    scale: 1.0,
-    x: 100.0,
-    y: 100.0,
-};
+static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
+    Mutex::new(Config {
+        screen_width: 1000.0,
+        screen_height: 750.0,
+        width: 80.0,
+        height: 30.0,
+        scale: 1.0,
+        x: 100.0,
+        y: 100.0,
+    })
+});
 
 #[tauri::command]
-async fn get_default_size() -> Config {
-    CONFIG.clone()
+async fn get_default_size() -> Result<String, String> {
+    let json_str = serde_json::to_string(&*CONFIG)
+    .map_err(|err| err.to_string())?;
+    println!("size: {}", json_str);
+    Ok(json_str)
 }
 
 #[tauri::command]
 async fn show_lock_windows(
     app: tauri::AppHandle,
     state: tauri::State<'_, LockState>,
-    end_at_ms: i64,
+    size: Config,
 ) -> Result<(), String> {
     let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
     if !labels.is_empty() {
@@ -69,16 +73,19 @@ async fn show_lock_windows(
         }
         return Ok(());
     }
-
+    println!("x: {}  y: {}", size.x, size.y);
     let label = format!("lockscreen-primary");
-    let width = 80.0;
-    let height = 30.0;
-    let x = unsafe {CONFIG.x};
-    let y = unsafe {CONFIG.y};
-    // let x = 0.0;
-    // let y = 0.0;
+    let width = size.width as f64;
+    let height = size.height as f64;
+    let x = size.x as f64;
+    let y = size.y as f64;
+    let mut config = CONFIG.lock().unwrap();
+    config.width = size.width;
+    config.height = size.height;
+    config.x = size.x;
+    config.y = size.y;
 
-    let url = format!("index.html?lockscreen=1&end={}", end_at_ms,);
+    let url = format!("index.html?lockscreen=1&end={}", 33,);
     let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
         .decorations(false)
         .transparent(false)
@@ -175,14 +182,16 @@ pub fn run() {
         .setup(|app| {
             if let Ok(Some(monitor)) = app.primary_monitor() {
                 let size = monitor.size();
-                unsafe {
-                    CONFIG.screen_width = size.width as f64;
-                    CONFIG.screen_height = size.height as f64;
-                    CONFIG.scale = monitor.scale_factor();
-                    
-                    CONFIG.x = ((CONFIG.screen_width / 3.0) as f64 / CONFIG.scale).floor();
-                    CONFIG.y = (CONFIG.screen_height as f64 / CONFIG.scale).floor() - 150.0;
-                }
+                let mut config = CONFIG.lock().unwrap();
+                config.scale = monitor.scale_factor();
+                config.screen_width = (size.width as f64 / config.scale).floor() as f64;
+                config.screen_height = (size.height as f64 / config.scale).floor() as f64;
+                
+                config.x = (config.screen_width / 3.0).floor() as f64;
+                config.y = config.screen_height - 150.0;
+let json_str = serde_json::to_string(&*config)
+    .map_err(|err| err.to_string())?;
+println!("size: {}", json_str);
             }
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);

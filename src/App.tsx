@@ -18,8 +18,12 @@ function App() {
   const [posX, setPosX] = useState(100);
   // 位置 Y
   const [posY, setPosY] = useState(100);
+  // 宽度
+  // const [width, setWidth] = useState(80);
+  // // 高度
+  // const [height, setHeight] = useState(30);
   // 显示锁屏弹框
-  const [showLockScreen, setShowLockScreen] = useState(false);
+  // const [showLockScreen, setShowLockScreen] = useState(false);
   const defaultConfig = {
     screen_width: 1000.0,
     screen_height: 750.0,
@@ -42,21 +46,22 @@ function App() {
   }
   
   // 获取全部屏幕尺寸
-  const getScreenInfo = async () => {
+  const getScreenInfo = useCallback(async () => {
     invoke('get_default_size').then((paylod: any) => {
+    const config = JSON.parse(paylod);
       setSize({
-        screen_width: paylod.screen_width,
-        screen_height: paylod.screen_height,
-        width: paylod.width,
-        height: paylod.height,
-        scale: paylod.scale,
-        x: paylod.x,
-        y: paylod.y,
+        screen_width: config.screen_width,
+        screen_height: config.screen_height,
+        width: config.width,
+        height: config.height,
+        scale: config.scale,
+        x: config.x,
+        y: config.y,
       })
     });
-  }
+  }, [setSize])
   
-  const setStorageSize = async () => {
+  const setStorageSize = useCallback(async () => {
     await getScreenInfo();
     const screenInfo = localStorage.getItem("screenInfo");
     if (screenInfo === null) {
@@ -75,9 +80,19 @@ function App() {
         localStorage.setItem("screenInfo", JSON.stringify(size));
       }
     }
-  }
+  }, [size])
   
-  const getNewPos = (oldx: any, oldy: any) => {
+  const saveStorageSize = useCallback(async () => {
+    const screenInfo = localStorage.getItem("screenInfo");
+    if (screenInfo === null) {
+      await getScreenInfo();
+      setPosX(size.x);
+      setPosY(size.y);
+    }
+    localStorage.setItem("screenInfo", JSON.stringify(size));
+  }, [size])
+  
+  const getNewPos = useCallback((oldx: any, oldy: any) => {
     let x = oldx, y = oldy;
     if (oldx < 0) {
       x = 0
@@ -92,7 +107,7 @@ function App() {
       y = size.screen_width - 30.0
     }
     return [x, y]
-  }
+  }, [size])
   
   
   useEffect(() => {
@@ -144,19 +159,18 @@ function App() {
   };
   
   const handleStartRest = useCallback(async () => {
-    if (localStorage.getItem("restEnabled") !== "true") return;
     changeShowLockScreen(true);
     showLockWindows();
   }, [posY]);
   
-  const showLockWindows = () => {
+  const showLockWindows = useCallback(() => {
+    console.log('show_lock_windows s:', size)
     invoke("show_lock_windows", {
-      endAtMs: 55000000,
+      size: size,
     }).catch((error) => console.error("锁屏窗口创建失败", error));
-  }
+  }, [size])
   
   const hideLockWindows = () => {
-    // invoke("log_app", { message: "前端请求关闭锁屏" }).catch(() => undefined);
     invoke("hide_lock_windows").catch((error) =>
       console.error("锁屏窗口关闭失败", error)
     );
@@ -226,37 +240,39 @@ function App() {
   }
   
   const changeShowLockScreen = (val: boolean) => {
-      setShowLockScreen(val);
+      // setShowLockScreen(val);
       localStorage.setItem("showLockScreen", String(val));
   }
   
-  const changePosX = (val: number) => {
+  const changePosX = useCallback((val: number) => {
       setPosX(val);
-      localStorage.setItem("posX", String(val));
-  }
+      size.x = val;
+      saveStorageSize();
+  }, [size])
   
-  const blurPosX = (val: number) => {
-      if (val < 30) {
-        val = 30;
-      } else if (val > 180) {
-        val = 180;
+  const blurPosX = useCallback((val: number) => {
+      if (val < 0) {
+        val = 0;
+      } else if (val > size.screen_width) {
+        val = size.screen_width;
       }
       changePosX(val);
-  }
+  }, [size])
   
-  const changePosY = (val: number) => {
+  const changePosY = useCallback((val: number) => {
       setPosY(val);
-      localStorage.setItem("posY", String(val));
-  }
+      size.y = val;
+      saveStorageSize();
+  }, [size])
   
-  const blurPosY = (val: number) => {
-      if (val < 1) {
-        val = 1;
-      } else if (val > 30) {
-        val = 30;
+  const blurPosY = useCallback((val: number) => {
+      if (val < 0) {
+        val = 0;
+      } else if (val > size.screen_height) {
+        val = size.screen_height;
       }
       changePosY(val);
-  }
+  }, [size])
   
   const filePath = "文档\\workoff\\demo.txt";
   const dateText = new Date().toLocaleDateString("zh-CN", {
