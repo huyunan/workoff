@@ -4,9 +4,9 @@ import {
   useState,
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen } from '@tauri-apps/api/event';
+import { TauriEvent } from '@tauri-apps/api/event'
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from '@tauri-apps/api/event';
 import "./App.css";
 
 function App() {
@@ -15,38 +15,109 @@ function App() {
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
   // 位置 X
-  const [restMinutes, setRestMinutes] = useState(100);
+  const [posX, setPosX] = useState(100);
   // 位置 Y
-  const [restDuration, setRestDuration] = useState(3);
+  const [posY, setPosY] = useState(100);
   // 显示锁屏弹框
   const [showLockScreen, setShowLockScreen] = useState(false);
-  const [size, setSize] = useState({ w: 0, h: 0, scale: 1 })
+  const defaultConfig = {
+    screen_width: 1000.0,
+    screen_height: 750.0,
+    width: 80.0,
+    height: 30.0,
+    scale: 1.0,
+    x: 100.0,
+    y: 100.0,
+  };
+  const [size, setSize] = useState(defaultConfig)
   
+  type Config = {
+    screen_width: number,
+    screen_height: number,
+    width: number,
+    height: number,
+    scale: number,
+    x: number,
+    y: number,
+  }
   
   // 获取全部屏幕尺寸
   const getScreenInfo = async () => {
-    const appWindow = getCurrentWindow();
-    const scale = await appWindow.scaleFactor()
-    const position = await appWindow.innerPosition()
-    const size = await appWindow.innerSize()
-    setSize({
-      w: size.width,
-      h: size.height,
-      scale: scale
-    })
-    console.log('屏幕像素宽高：', size.width, size.height, scale);
-
-    invoke('get_default_size').then((message: any) => {
-      console.log(message)
+    invoke('get_default_size').then((paylod: any) => {
+      setSize({
+        screen_width: paylod.screen_width,
+        screen_height: paylod.screen_height,
+        width: paylod.width,
+        height: paylod.height,
+        scale: paylod.scale,
+        x: paylod.x,
+        y: paylod.y,
+      })
     });
-    // invoke("set_store", {
-    //   width: size.width,
-    //   height: size.height,
-    //   scale,
-    //   x: position.x,
-    //   y: position.y
-    // }).catch((error) => console.error("锁屏窗口创建失败", error));
   }
+  
+  const setStorageSize = async () => {
+    await getScreenInfo();
+    const screenInfo = localStorage.getItem("screenInfo");
+    if (screenInfo === null) {
+      setPosX(size.x);
+      setPosY(size.y);
+      localStorage.setItem("screenInfo", JSON.stringify(size));
+    } else {
+      const info = JSON.parse(screenInfo);
+      if (info.scale == size.scale) {
+        setPosX(info.x);
+        setPosY(info.y);
+      } else {
+        const [x, y] = getNewPos(info.x, info.y);
+        setPosX(x);
+        setPosY(y);
+        localStorage.setItem("screenInfo", JSON.stringify(size));
+      }
+    }
+  }
+  
+  const getNewPos = (oldx: any, oldy: any) => {
+    let x = oldx, y = oldy;
+    if (oldx < 0) {
+      x = 0
+    }
+    if (oldx > size.screen_width - 80.0) {
+      x = size.screen_width - 80.0
+    }
+    if (oldy < 0) {
+      y = 0
+    }
+    if (oldy > size.screen_height - 30.0) {
+      y = size.screen_width - 30.0
+    }
+    return [x, y]
+  }
+  
+  
+  useEffect(() => {
+    const id = setTimeout(async() => {
+      await getScreenInfo();
+    }, 0);
+    return () => {
+      clearTimeout(id);
+    }
+  }, [])
+
+  useEffect(() => {
+    let unlistenFocus: () => void
+    const bindEvent = async () => {
+      const appWebview = getCurrentWebviewWindow()
+      // 进入前台
+      unlistenFocus = await appWebview.listen(TauriEvent.WINDOW_FOCUS, async () => {
+        await getScreenInfo();
+      })
+    }
+    bindEvent()
+    return () => {
+      unlistenFocus?.()
+    }
+  }, [])
   
   // 内容
   const [value, setValue] = useState('')
@@ -74,10 +145,9 @@ function App() {
   
   const handleStartRest = useCallback(async () => {
     if (localStorage.getItem("restEnabled") !== "true") return;
-    await getScreenInfo();
     changeShowLockScreen(true);
     showLockWindows();
-  }, [restDuration]);
+  }, [posY]);
   
   const showLockWindows = () => {
     invoke("show_lock_windows", {
@@ -91,16 +161,7 @@ function App() {
       console.error("锁屏窗口关闭失败", error)
     );
   }
-
-  type Config = {
-    screen_width: number,
-    screen_height: number,
-    width: number,
-    height: number,
-    scale: number,
-    x: number,
-    y: number,
-  }
+  
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<Config>('default-size', (event) => {
@@ -125,6 +186,7 @@ function App() {
   }, []);
   
   useEffect(() => {
+    setStorageSize();
     const filterEnabled = localStorage.getItem("filterEnabled");
     if (filterEnabled === null || filterEnabled === "true") {
       setFilterEnabled(true);
@@ -141,20 +203,20 @@ function App() {
       changeShowLockScreen(false);
     }
     
-    const restMinutes = localStorage.getItem("restMinutes");
-    if (restMinutes !== null) {
-      setRestMinutes(Number(restMinutes));
+    const posX = localStorage.getItem("posX");
+    if (posX !== null) {
+      setPosX(Number(posX));
     } else {
-      setRestMinutes(60);
-      localStorage.setItem("restMinutes", "60");
+      setPosX(60);
+      localStorage.setItem("posX", "60");
     }
     
-    const restDuration = localStorage.getItem("restDuration");
-    if (restDuration !== null) {
-      setRestDuration(Number(restDuration));
+    const posY = localStorage.getItem("posY");
+    if (posY !== null) {
+      setPosY(Number(posY));
     } else {
-      setRestDuration(3);
-      localStorage.setItem("restDuration", "3");
+      setPosY(3);
+      localStorage.setItem("posY", "3");
     }
   }, []);
   
@@ -168,32 +230,32 @@ function App() {
       localStorage.setItem("showLockScreen", String(val));
   }
   
-  const changeRestMinutes = (val: number) => {
-      setRestMinutes(val);
-      localStorage.setItem("restMinutes", String(val));
+  const changePosX = (val: number) => {
+      setPosX(val);
+      localStorage.setItem("posX", String(val));
   }
   
-  const blurRestMinutes = (val: number) => {
+  const blurPosX = (val: number) => {
       if (val < 30) {
         val = 30;
       } else if (val > 180) {
         val = 180;
       }
-      changeRestMinutes(val);
+      changePosX(val);
   }
   
-  const changeRestDuration = (val: number) => {
-      setRestDuration(val);
-      localStorage.setItem("restDuration", String(val));
+  const changePosY = (val: number) => {
+      setPosY(val);
+      localStorage.setItem("posY", String(val));
   }
   
-  const blurRestDuration = (val: number) => {
+  const blurPosY = (val: number) => {
       if (val < 1) {
         val = 1;
       } else if (val > 30) {
         val = 30;
       }
-      changeRestDuration(val);
+      changePosY(val);
   }
   
   const filePath = "文档\\workoff\\demo.txt";
@@ -240,34 +302,34 @@ function App() {
                     <input
                       className="pill__input"
                       type="number"
-                      min={30}
-                      max={180}
-                      value={restMinutes}
+                      min={0}
+                      max={size.screen_width}
+                      value={posX}
                       onChange={(event) =>
-                        changeRestMinutes(Number(event.target.value))
+                        changePosX(Number(event.target.value))
                       }
                       onBlur={(event) =>
-                        blurRestMinutes(Number(event.target.value))
+                        blurPosX(Number(event.target.value))
                       }
                     />
-                    <span>分钟</span>
+                    <span>px</span>
                   </div>
                   <div className="pill">
                     <p className="pill__label">位置 Y</p>
                     <input
                       className="pill__input"
                       type="number"
-                      min={1}
-                      max={30}
-                      value={restDuration}
+                      min={0}
+                      max={size.screen_height}
+                      value={posY}
                       onChange={(event) =>
-                        changeRestDuration(Number(event.target.value))
+                        changePosY(Number(event.target.value))
                       }
                       onBlur={(event) =>
-                        blurRestDuration(Number(event.target.value))
+                        blurPosY(Number(event.target.value))
                       }
                     />
-                    <span>分钟</span>
+                    <span>px</span>
                   </div>
                 </div>
 

@@ -40,9 +40,9 @@ struct Config {
 const CONFIG: Config = Config {
     screen_width: 1000.0,
     screen_height: 750.0,
-    width: 1000.0,
-    height: 750.0,
-    scale: 1.25,
+    width: 80.0,
+    height: 30.0,
+    scale: 1.0,
     x: 100.0,
     y: 100.0,
 };
