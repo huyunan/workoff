@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs::{create_dir_all, File};
+use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use dirs::document_dir;
 use std::path::{Path};
@@ -13,9 +13,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
-extern crate winapi;
-use winapi::um::winuser::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
 
+const TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("icons/32x32.png");
 #[derive(Default)]
 struct LockState {
     labels: Mutex<Vec<String>>,
@@ -25,7 +24,33 @@ struct AppState {
     allow_exit: AtomicBool,
 }
 
-const TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("icons/32x32.png");
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Default)]
+struct Config {
+    screen_width: f64,
+    screen_height: f64,
+    width: f64,
+    height: f64,
+    scale: f64,
+    x: f64,
+    y: f64,
+}
+
+const CONFIG: Config = Config {
+    screen_width: 1000.0,
+    screen_height: 750.0,
+    width: 1000.0,
+    height: 750.0,
+    scale: 1.25,
+    x: 100.0,
+    y: 100.0,
+};
+
+#[tauri::command]
+async fn get_default_size() -> Config {
+    CONFIG.clone()
+}
 
 #[tauri::command]
 async fn show_lock_windows(
@@ -45,34 +70,29 @@ async fn show_lock_windows(
         return Ok(());
     }
 
-    let monitors = app.available_monitors().map_err(|err| err.to_string())?;
-    for (index, monitor) in monitors.into_iter().enumerate() {
-        let label = format!("lockscreen-{}", index);
-        let scale = monitor.scale_factor();
-        let width = 80.0;
-        let height = 30.0;
-        let width_all = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-        let height_all = unsafe { GetSystemMetrics(SM_CYSCREEN) };
-        println!("Width: {}, Height: {}", width_all, height_all);
-        let x = ((width_all / 3) as f64 / scale).floor();
-        let y = (height_all as f64 / scale).floor() - 150.0;
+    let label = format!("lockscreen-primary");
+    let width = 80.0;
+    let height = 30.0;
+    let x = unsafe {CONFIG.x};
+    let y = unsafe {CONFIG.y};
+    // let x = 0.0;
+    // let y = 0.0;
 
-        let url = format!("index.html?lockscreen=1&end={}", end_at_ms,);
-        let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
-            .decorations(false)
-            .transparent(false)
-            .resizable(true)
-            .drag_and_drop(true)
-            .inner_size(width, height)
-            .position(x, y)
-            .build()
-            .map_err(|err| err.to_string())?;
+    let url = format!("index.html?lockscreen=1&end={}", end_at_ms,);
+    let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
+        .decorations(false)
+        .transparent(false)
+        .resizable(true)
+        .drag_and_drop(true)
+        .inner_size(width, height)
+        .position(x, y)
+        .build()
+        .map_err(|err| err.to_string())?;
 
-        apply_default_window_icon(&app, &window);
-        let _ = window.set_fullscreen(false);
-        let _ = window.set_focus();
-        labels.push(label);
-    }
+    apply_default_window_icon(&app, &window);
+    let _ = window.set_fullscreen(false);
+    let _ = window.set_focus();
+    labels.push(label);
     Ok(())
 }
 
@@ -153,6 +173,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            if let Ok(Some(monitor)) = app.primary_monitor() {
+                let size = monitor.size();
+                unsafe {
+                    CONFIG.screen_width = size.width as f64;
+                    CONFIG.screen_height = size.height as f64;
+                    CONFIG.scale = monitor.scale_factor();
+                    
+                    CONFIG.x = ((CONFIG.screen_width / 3.0) as f64 / CONFIG.scale).floor();
+                    CONFIG.y = (CONFIG.screen_height as f64 / CONFIG.scale).floor() - 150.0;
+                }
+            }
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);
                 let _ = window.center();
@@ -252,6 +283,7 @@ pub fn run() {
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,
+            get_default_size,
             log_app
         ])
         .run(tauri::generate_context!())

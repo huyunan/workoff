@@ -4,6 +4,8 @@ import {
   useState,
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from '@tauri-apps/api/event';
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
@@ -20,24 +22,31 @@ function App() {
   const [showLockScreen, setShowLockScreen] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0, scale: 1 })
   
+  
   // 获取全部屏幕尺寸
-  useEffect(() => {
-    const getScreenInfo = async () => {
-      // const main = await screen.main()
-      
-      const appWebview = getCurrentWebviewWindow();
-      const scale = await appWebview.scaleFactor()
-      const position = await appWebview.innerPosition()
-      const size = await appWebview.innerSize()
-      setSize({
-        w: size.width,
-        h: size.height,
-        scale: scale
-      })
-      console.log('屏幕像素宽高：', size.width, size.height, scale);
-    }
-    getScreenInfo()
-  }, [])
+  const getScreenInfo = async () => {
+    const appWindow = getCurrentWindow();
+    const scale = await appWindow.scaleFactor()
+    const position = await appWindow.innerPosition()
+    const size = await appWindow.innerSize()
+    setSize({
+      w: size.width,
+      h: size.height,
+      scale: scale
+    })
+    console.log('屏幕像素宽高：', size.width, size.height, scale);
+
+    invoke('get_default_size').then((message: any) => {
+      console.log(message)
+    });
+    // invoke("set_store", {
+    //   width: size.width,
+    //   height: size.height,
+    //   scale,
+    //   x: position.x,
+    //   y: position.y
+    // }).catch((error) => console.error("锁屏窗口创建失败", error));
+  }
   
   // 内容
   const [value, setValue] = useState('')
@@ -63,8 +72,9 @@ function App() {
    setValue(val);
   };
   
-  const handleStartRest = useCallback(() => {
+  const handleStartRest = useCallback(async () => {
     if (localStorage.getItem("restEnabled") !== "true") return;
+    await getScreenInfo();
     changeShowLockScreen(true);
     showLockWindows();
   }, [restDuration]);
@@ -81,24 +91,26 @@ function App() {
       console.error("锁屏窗口关闭失败", error)
     );
   }
-  
-  useEffect(() => {
-    if (!showLockScreen) return;
-  }, [restDuration, showLockScreen]);
 
+  type Config = {
+    screen_width: number,
+    screen_height: number,
+    width: number,
+    height: number,
+    scale: number,
+    x: number,
+    y: number,
+  }
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    const appWebview = getCurrentWebviewWindow();
-    appWebview
-      .listen<string>("lockscreen-action", (event) => {
-        if (event.payload === "exit") {
-          handleExitRest();
-        }
-      })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch((error) => console.error("监听锁屏动作失败", error));
+    listen<Config>('default-size', (event) => {
+      console.log(
+        `downloading ${event.payload}`
+      );
+    })
+    .then((fn) => {
+      unlisten = fn;
+    });
 
     return () => {
       if (unlisten) {
