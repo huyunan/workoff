@@ -56,7 +56,6 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(monitor) = monitor_opt {
         // 动态获取或创建 store
         let store = app.store("config.json").map_err(|e| e.to_string())?;
-        // let store = app.get_store("config.json").ok_or("Store not loaded")?;
         let size = monitor.size();
         let mut config = CONFIG.lock().unwrap();
         config.scale = monitor.scale_factor();
@@ -64,13 +63,8 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
         config.screen_height = (size.height as f64 / config.scale).floor() as f64;
 
         if let Some(value) = store.get("screenInfo") {
-            println!("store.get {}", value);
-            // let json_str = serde_json::to_string(&value).unwrap();
-            // println!("store.get json_str {}", json_str);
             let prev: Config = from_value(value.clone())
                 .map_err(|e| format!("Failed to deserialize: {}", e))?;
-            // let prev: Config = serde_json::from_str(&json_str).unwrap();
-            println!("store.get Config {:?}", prev);
             if config.scale != prev.scale
                 || config.screen_width != prev.screen_width
                 || config.screen_height != prev.screen_height
@@ -78,7 +72,6 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 config.x = (config.screen_width / 3.0).floor() as f64;
                 config.y = config.screen_height - 150.0;
                 let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
-                println!("app size: {}", json_str);
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -95,7 +88,6 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
             config.x = (config.screen_width / 3.0).floor() as f64;
             config.y = config.screen_height - 150.0;
             let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
-            println!("app size: {}", json_str);
             
             store.set("screenInfo", json!({
                 "screen_width": config.screen_width,
@@ -132,7 +124,6 @@ async fn show_lock_windows(
     if let Some(value) = store.get("screenInfo") {
         let size: Config = from_value(value.clone())
             .map_err(|e| format!("Failed to deserialize: {}", e))?;
-        println!("x: {}  y: {}", size.x, size.y);
         let label = format!("lockscreen-primary");
         let width = size.width as f64;
         let height = size.height as f64;
