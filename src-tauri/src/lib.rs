@@ -210,6 +210,22 @@ pub fn run() {
                         }));
                         store.save().map_err(|e| e.to_string())?;
                     }
+                } else {
+                    config.x = (config.screen_width / 3.0).floor() as f64;
+                    config.y = config.screen_height - 150.0;
+                    let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
+                    println!("app size: {}", json_str);
+                    
+                    store.set("screenInfo", json!({
+                        "screen_width": config.screen_width,
+                        "screen_height": config.screen_height,
+                        "width": config.width,
+                        "height": config.height,
+                        "scale": config.scale,
+                        "x": config.x,
+                        "y": config.y,
+                    }));
+                    store.save().map_err(|e| e.to_string())?;
                 }
             }
             if let Some(window) = app.get_webview_window("main") {
