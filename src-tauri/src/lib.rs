@@ -51,10 +51,71 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
 });
 
 #[tauri::command]
+async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
+    let monitor_opt = app.primary_monitor().map_err(|e| e.to_string())?;
+    if let Some(monitor) = monitor_opt {
+        // 动态获取或创建 store
+        let store = app.store("config.json").map_err(|e| e.to_string())?;
+        // let store = app.get_store("config.json").ok_or("Store not loaded")?;
+        let size = monitor.size();
+        let mut config = CONFIG.lock().unwrap();
+        config.scale = monitor.scale_factor();
+        config.screen_width = (size.width as f64 / config.scale).floor() as f64;
+        config.screen_height = (size.height as f64 / config.scale).floor() as f64;
+
+        if let Some(value) = store.get("screenInfo") {
+            println!("store.get {}", value);
+            // let json_str = serde_json::to_string(&value).unwrap();
+            // println!("store.get json_str {}", json_str);
+            let prev: Config = from_value(value.clone())
+                .map_err(|e| format!("Failed to deserialize: {}", e))?;
+            // let prev: Config = serde_json::from_str(&json_str).unwrap();
+            println!("store.get Config {:?}", prev);
+            if config.scale != prev.scale
+                || config.screen_width != prev.screen_width
+                || config.screen_height != prev.screen_height
+                || prev.x == -1.0 {
+                config.x = (config.screen_width / 3.0).floor() as f64;
+                config.y = config.screen_height - 150.0;
+                let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
+                println!("app size: {}", json_str);
+                
+                store.set("screenInfo", json!({
+                    "screen_width": config.screen_width,
+                    "screen_height": config.screen_height,
+                    "width": config.width,
+                    "height": config.height,
+                    "scale": config.scale,
+                    "x": config.x,
+                    "y": config.y,
+                }));
+                store.save().map_err(|e| e.to_string())?;
+            }
+        } else {
+            config.x = (config.screen_width / 3.0).floor() as f64;
+            config.y = config.screen_height - 150.0;
+            let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
+            println!("app size: {}", json_str);
+            
+            store.set("screenInfo", json!({
+                "screen_width": config.screen_width,
+                "screen_height": config.screen_height,
+                "width": config.width,
+                "height": config.height,
+                "scale": config.scale,
+                "x": config.x,
+                "y": config.y,
+            }));
+            store.save().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn show_lock_windows(
     app: tauri::AppHandle,
     state: tauri::State<'_, LockState>,
-    size: Config,
 ) -> Result<(), String> {
     let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
     if !labels.is_empty() {
@@ -67,33 +128,38 @@ async fn show_lock_windows(
         }
         return Ok(());
     }
-    println!("x: {}  y: {}", size.x, size.y);
-    let label = format!("lockscreen-primary");
-    let width = size.width as f64;
-    let height = size.height as f64;
-    let x = size.x as f64;
-    let y = size.y as f64;
-    let mut config = CONFIG.lock().unwrap();
-    config.width = size.width;
-    config.height = size.height;
-    config.x = size.x;
-    config.y = size.y;
-
-    let url = format!("index.html?lockscreen=1&end={}", 33,);
-    let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
-        .decorations(false)
-        .transparent(false)
-        .resizable(true)
-        .drag_and_drop(true)
-        .inner_size(width, height)
-        .position(x, y)
-        .build()
-        .map_err(|err| err.to_string())?;
-
-    apply_default_window_icon(&app, &window);
-    let _ = window.set_fullscreen(false);
-    let _ = window.set_focus();
-    labels.push(label);
+    let store = app.store("config.json").map_err(|e| e.to_string())?;
+    if let Some(value) = store.get("screenInfo") {
+        let size: Config = from_value(value.clone())
+            .map_err(|e| format!("Failed to deserialize: {}", e))?;
+        println!("x: {}  y: {}", size.x, size.y);
+        let label = format!("lockscreen-primary");
+        let width = size.width as f64;
+        let height = size.height as f64;
+        let x = size.x as f64;
+        let y = size.y as f64;
+        let mut config = CONFIG.lock().unwrap();
+        config.width = size.width;
+        config.height = size.height;
+        config.x = size.x;
+        config.y = size.y;
+    
+        let url = format!("index.html?lockscreen=1&end={}", 33,);
+        let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
+            .decorations(false)
+            .transparent(false)
+            .resizable(true)
+            .drag_and_drop(true)
+            .inner_size(width, height)
+            .position(x, y)
+            .build()
+            .map_err(|err| err.to_string())?;
+    
+        apply_default_window_icon(&app, &window);
+        let _ = window.set_fullscreen(false);
+        let _ = window.set_focus();
+        labels.push(label);
+    }
     Ok(())
 }
 
@@ -172,62 +238,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            if let Ok(Some(monitor)) = app.primary_monitor() {
-                    // 动态获取或创建 store
-                let store = app.store("config.json")?;
-                // let store = app.get_store("config.json").ok_or("Store not loaded")?;
-                let size = monitor.size();
-                let mut config = CONFIG.lock().unwrap();
-                config.scale = monitor.scale_factor();
-                config.screen_width = (size.width as f64 / config.scale).floor() as f64;
-                config.screen_height = (size.height as f64 / config.scale).floor() as f64;
-
-                if let Some(value) = store.get("screenInfo") {
-                    println!("store.get {}", value);
-                    // let json_str = serde_json::to_string(&value).unwrap();
-                    // println!("store.get json_str {}", json_str);
-                    let prev: Config = from_value(value.clone())
-                        .map_err(|e| format!("Failed to deserialize: {}", e))?;
-                    // let prev: Config = serde_json::from_str(&json_str).unwrap();
-                    println!("store.get Config {:?}", prev);
-                    if config.scale != prev.scale
-                        || config.screen_width != prev.screen_width
-                        || config.screen_height != prev.screen_height
-                        || prev.x == -1.0 {
-                        config.x = (config.screen_width / 3.0).floor() as f64;
-                        config.y = config.screen_height - 150.0;
-                        let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
-                        println!("app size: {}", json_str);
-                        
-                        store.set("screenInfo", json!({
-                            "screen_width": config.screen_width,
-                            "screen_height": config.screen_height,
-                            "width": config.width,
-                            "height": config.height,
-                            "scale": config.scale,
-                            "x": config.x,
-                            "y": config.y,
-                        }));
-                        store.save().map_err(|e| e.to_string())?;
-                    }
-                } else {
-                    config.x = (config.screen_width / 3.0).floor() as f64;
-                    config.y = config.screen_height - 150.0;
-                    let json_str = serde_json::to_string(&*config).map_err(|err| err.to_string())?;
-                    println!("app size: {}", json_str);
-                    
-                    store.set("screenInfo", json!({
-                        "screen_width": config.screen_width,
-                        "screen_height": config.screen_height,
-                        "width": config.width,
-                        "height": config.height,
-                        "scale": config.scale,
-                        "x": config.x,
-                        "y": config.y,
-                    }));
-                    store.save().map_err(|e| e.to_string())?;
-                }
-            }
+            let handle = app.handle().clone();
+            get_default_size(handle);
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);
                 let _ = window.center();
@@ -326,6 +338,7 @@ pub fn run() {
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,
+            get_default_size,
             log_app
         ])
         .run(tauri::generate_context!())
