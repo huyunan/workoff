@@ -27,13 +27,6 @@ struct AppState {
 
 const TRAY_ICON: tauri::image::Image<'static> = tauri::include_image!("icons/32x32.png");
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct RestStorageConfig {
-    #[serde(default)]
-    custom_dir: String,
-}
-
 #[tauri::command]
 async fn show_lock_windows(
     app: tauri::AppHandle,
@@ -129,7 +122,7 @@ fn append_app_log(message: &str) -> io::Result<()> {
     // File::create：创建/覆盖文件（若文件已存在会清空内容！）
     let mut file: File;
     if !Path::new(&target_file).exists() {
-        let mut file = File::create(&target_file)?;
+        file = File::create(&target_file)?;
     }
     // 文件已存在：如果要【覆盖旧内容】用write(true)，如果要【追加内容】用append(true)
     file = File::options().append(true).open(&target_file)?;

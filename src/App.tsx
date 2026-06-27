@@ -10,16 +10,34 @@ import "./App.css";
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
-  
-  const now = new Date();
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
-  // 休息间隔
-  const [restMinutes, setRestMinutes] = useState(60);
-  // 休息时间
+  // 位置 X
+  const [restMinutes, setRestMinutes] = useState(100);
+  // 位置 Y
   const [restDuration, setRestDuration] = useState(3);
   // 显示锁屏弹框
   const [showLockScreen, setShowLockScreen] = useState(false);
+  const [size, setSize] = useState({ w: 0, h: 0, scale: 1 })
+  
+  // 获取全部屏幕尺寸
+  useEffect(() => {
+    const getScreenInfo = async () => {
+      // const main = await screen.main()
+      
+      const appWebview = getCurrentWebviewWindow();
+      const scale = await appWebview.scaleFactor()
+      const position = await appWebview.innerPosition()
+      const size = await appWebview.innerSize()
+      setSize({
+        w: size.width,
+        h: size.height,
+        scale: scale
+      })
+      console.log('屏幕像素宽高：', size.width, size.height, scale);
+    }
+    getScreenInfo()
+  }, [])
   
   // 内容
   const [value, setValue] = useState('')
@@ -166,13 +184,8 @@ function App() {
       changeRestDuration(val);
   }
   
-  const filePath = "文档\workoff\demo.txt";
-
-  const timeText = now.toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const dateText = now.toLocaleDateString("zh-CN", {
+  const filePath = "文档\\workoff\\demo.txt";
+  const dateText = new Date().toLocaleDateString("zh-CN", {
     month: "long",
     day: "numeric",
     weekday: "short",
@@ -195,7 +208,6 @@ function App() {
             </div>
             <div className="topbar__right">
               <div className="time-pill">
-                <span>{timeText}</span>
                 <span className="time-pill__date">{dateText}</span>
               </div>
             </div>
@@ -206,13 +218,13 @@ function App() {
               <div className="card">
                 <div className="card__header">
                   <div>
-                    <p className="card__eyebrow">每日勤记，渐入佳境</p>
+                    <p className="card__eyebrow">每日勤记，渐入佳境。</p>
                   </div>
                 </div>
 
                 <div className="pill-row">
                   <div className="pill">
-                    <p className="pill__label">每隔</p>
+                    <p className="pill__label">位置 X</p>
                     <input
                       className="pill__input"
                       type="number"
@@ -229,7 +241,7 @@ function App() {
                     <span>分钟</span>
                   </div>
                   <div className="pill">
-                    <p className="pill__label">休息</p>
+                    <p className="pill__label">位置 Y</p>
                     <input
                       className="pill__input"
                       type="number"
