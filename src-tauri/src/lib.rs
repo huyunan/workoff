@@ -1,19 +1,15 @@
-use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::{self, Write};
 use dirs::document_dir;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
-use std::time::Instant;
 use tauri::{
     menu::MenuBuilder,
-    path::BaseDirectory,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -38,21 +34,12 @@ struct RestStorageConfig {
     custom_dir: String,
 }
 
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct RestStorageSettings {
-    current_dir: String,
-    default_dir: String,
-    is_default: bool,
-}
-
 #[tauri::command]
 async fn show_lock_windows(
     app: tauri::AppHandle,
     state: tauri::State<'_, LockState>,
     end_at_ms: i64,
 ) -> Result<(), String> {
-    let start = Instant::now();
     let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
     if !labels.is_empty() {
         for label in labels.iter() {
@@ -66,7 +53,6 @@ async fn show_lock_windows(
     }
 
     let monitors = app.available_monitors().map_err(|err| err.to_string())?;
-    append_app_log(&app, &format!("锁屏创建开始 monitors={}", monitors.len()));
     for (index, monitor) in monitors.into_iter().enumerate() {
         let label = format!("lockscreen-{}", index);
         let scale = monitor.scale_factor();
@@ -94,15 +80,6 @@ async fn show_lock_windows(
         let _ = window.set_focus();
         labels.push(label);
     }
-
-    append_app_log(
-        &app,
-        &format!(
-            "锁屏创建完成 labels={} elapsed_ms={}",
-            labels.len(),
-            start.elapsed().as_millis()
-        ),
-    );
     Ok(())
 }
 
@@ -111,9 +88,7 @@ fn hide_lock_windows(
     app: tauri::AppHandle,
     state: tauri::State<'_, LockState>,
 ) -> Result<(), String> {
-    let start = Instant::now();
     let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
-    append_app_log(&app, &format!("锁屏关闭开始 labels={}", labels.len()));
     for label in labels.iter() {
         if !label.as_str().starts_with("lockscreen-") {
             continue;
@@ -123,118 +98,24 @@ fn hide_lock_windows(
         }
     }
     labels.clear();
-    append_app_log(
-        &app,
-        &format!("锁屏关闭完成 {}ms", start.elapsed().as_millis()),
-    );
     Ok(())
 }
 
 #[tauri::command]
 fn lockscreen_action(app: tauri::AppHandle, action: String) -> Result<(), String> {
-    append_app_log(&app, &format!("锁屏动作: {}", action));
     for (_label, window) in app.webview_windows() {
         let _ = window.emit("lockscreen-action", action.clone());
     }
     Ok(())
 }
 
-fn date_time() -> String {
-    let utc_time = Utc::now();
-    let china_timezone = FixedOffset::east_opt(8 * 3600).unwrap();
-    // 将 UTC 时间转换为中国标准时间
-    let china_time: DateTime<FixedOffset> = utc_time.with_timezone(&china_timezone);
-    // 格式化
-    return china_time.format("%Y-%m-%d %H:%M:%S").to_string();
-}
-
-fn load_storage_config(path: &Path) -> RestStorageConfig {
-    let Ok(data) = fs::read_to_string(path) else {
-        return RestStorageConfig::default();
-    };
-    serde_json::from_str(&data).unwrap_or_default()
-}
-
-fn path_to_string(path: &Path) -> String {
-    path.to_string_lossy().to_string()
-}
-
-fn default_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .resolve("log", BaseDirectory::AppCache)
-        .map_err(|err| err.to_string())
-}
-
-fn storage_config_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .resolve("", BaseDirectory::AppConfig)
-        .map_err(|err| err.to_string())?;
-    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    Ok(dir.join("wallpaper-storage.json"))
-}
-
-fn storage_settings_from_config(
-    app: &AppHandle,
-    config: &RestStorageConfig,
-) -> Result<RestStorageSettings, String> {
-    let default_dir = default_dir(app)?;
-    let current_dir = if config.custom_dir.trim().is_empty() {
-        default_dir.clone()
-    } else {
-        PathBuf::from(config.custom_dir.trim())
-    };
-    Ok(RestStorageSettings {
-        current_dir: path_to_string(&current_dir),
-        default_dir: path_to_string(&default_dir),
-        is_default: current_dir == default_dir,
-    })
-}
-
-fn get_storage_settings_inner(app: &AppHandle) -> Result<RestStorageSettings, String> {
-    let config_path = storage_config_path(app)?;
-    let config = load_storage_config(&config_path);
-    storage_settings_from_config(app, &config)
-}
-
-fn allow_dir_on_scope(app: &AppHandle, dir: &Path) -> Result<(), String> {
-    app.asset_protocol_scope()
-        .allow_directory(dir, true)
-        .map_err(|err| err.to_string())
-}
-
-fn ensure_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let settings = get_storage_settings_inner(app)?;
-    let dir = PathBuf::from(settings.current_dir);
-    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    allow_dir_on_scope(app, &dir)?;
-    Ok(dir)
-}
-
-fn append_line(path: &Path, message: &str) {
-    let ts = date_time();
-    let line = format!("[{}] {}\n", ts, message);
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
-        let _ = file.write_all(line.as_bytes());
-    }
-}
-
-fn append_app_log(app: &AppHandle, message: &str) {
-    let dir = match ensure_dir(app) {
-        Ok(dir) => dir,
-        Err(_) => return,
-    };
-    append_line(&dir.join("app.log"), message);
-}
-
-fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
+fn append_app_log(message: &str) -> io::Result<()> {
     // -------------------------- 步骤1：获取用户文档目录 --------------------------
     let doc_path = document_dir()
         .ok_or_else(|| io::Error::new(
             io::ErrorKind::NotFound, 
             "无法找到当前用户的文档目录"
         ))?;
-    println!("当前用户文档目录：{:?}", doc_path);
     // -------------------------- 步骤2：定义目标路径 --------------------------
     let target_folder = doc_path.join("workoff");
     let target_file = target_folder.join("demo.txt");
@@ -242,7 +123,6 @@ fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
     // create_dir_all：递归创建目录
     if !target_folder.exists() {
         create_dir_all(&target_folder)?;
-        println!("✅ 已创建文件夹：{:?}", target_folder);
     }
     
     // -------------------------- 步骤4：创建文件并逐行写入 --------------------------
@@ -250,11 +130,9 @@ fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
     let mut file: File;
     if !Path::new(&target_file).exists() {
         let mut file = File::create(&target_file)?;
-        println!("已创建文件：{:?}", target_file);
     }
     // 文件已存在：如果要【覆盖旧内容】用write(true)，如果要【追加内容】用append(true)
     file = File::options().append(true).open(&target_file)?;
-    println!("ℹ️ 文件已存在，直接写入内容");
     
     let line = format!("{} \n", message);
     let _ = write!(file, "{}", line);
@@ -262,9 +140,8 @@ fn append_app_log2(app: &AppHandle, message: &str) -> io::Result<()> {
 }
 
 #[tauri::command]
-fn log_app(app: AppHandle, message: String) -> Result<(), String> {
-    append_app_log2(&app, &message);
-    append_app_log(&app, &message);
+fn log_app(message: String) -> Result<(), String> {
+    append_app_log(&message);
     Ok(())
 }
 
@@ -283,8 +160,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let dir = ensure_dir(app.handle())?;
-            allow_dir_on_scope(app.handle(), &dir)?;
             if let Some(window) = app.get_webview_window("main") {
                 apply_default_window_icon(app.handle(), &window);
                 let _ = window.center();

@@ -7,22 +7,20 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-function pad2(value: number) {
-  return value.toString().padStart(2, "0");
-}
-
-function formatDuration(totalSeconds: number) {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(clamped / 3600);
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
-}
-
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
-    
+  
+  const now = new Date();
+  // 过滤蓝光开关
+  const [filterEnabled, setFilterEnabled] = useState(true);
+  // 休息间隔
+  const [restMinutes, setRestMinutes] = useState(60);
+  // 休息时间
+  const [restDuration, setRestDuration] = useState(3);
+  // 显示锁屏弹框
+  const [showLockScreen, setShowLockScreen] = useState(false);
+  
   // 内容
   const [value, setValue] = useState('')
   const handleChange = (e: any) => {
@@ -47,41 +45,15 @@ function App() {
    setValue(val);
   };
   
-  const now = new Date();
-  // 过滤蓝光开关
-  const [filterEnabled, setFilterEnabled] = useState(true);
-  // 休息节奏开关
-  const [restEnabled, setRestEnabled] = useState(true);
-  // 休息间隔
-  const [restMinutes, setRestMinutes] = useState(60);
-  // 休息时间
-  const [restDuration, setRestDuration] = useState(3);
-  // 显示锁屏弹框
-  const [showLockScreen, setShowLockScreen] = useState(false);
-  // 下一次休息时间
-  const [nextMinutesAt, setNextMinutesAt] = useState<Date | null>(null);
-  // 休息结束时间（未弹出锁屏窗口前）
-  const [endDurationAt, setEndDurationAt] = useState<Date | null>(null);
-
-  const restDuraAt = () => {
-    return new Date(Date.now() + restDuration * 60 * 1000);
-  };
-  
-  const restMsAt = () => {
-    return new Date(Date.now() + restMinutes * 60 * 1000);
-  };
-  
   const handleStartRest = useCallback(() => {
     if (localStorage.getItem("restEnabled") !== "true") return;
-    setEndDurationAt(restDuraAt());
     changeShowLockScreen(true);
     showLockWindows();
   }, [restDuration]);
   
   const showLockWindows = () => {
-    const endDuraAt = endDurationAt ?? restDuraAt();
     invoke("show_lock_windows", {
-      endAtMs: endDuraAt.getTime(),
+      endAtMs: 55000000,
     }).catch((error) => console.error("锁屏窗口创建失败", error));
   }
   
@@ -94,7 +66,6 @@ function App() {
   
   useEffect(() => {
     if (!showLockScreen) return;
-    setEndDurationAt(restDuraAt());
   }, [restDuration, showLockScreen]);
 
   useEffect(() => {
@@ -119,35 +90,9 @@ function App() {
   }, []);
   
   const handleExitRest = useCallback(() => {
-    // invoke("log_app", { message: "前端退出休息" }).catch(() => undefined);
     changeShowLockScreen(false);
     hideLockWindows();
-    setEndDurationAt(null);
-    if (restEnabled) {
-      setNextMinutesAt(restMsAt());
-    } else {
-      setNextMinutesAt(null);
-    }
-  }, [restEnabled]);
-
-  useEffect(() => {
-    if (showLockScreen) return;
-    if (!restEnabled) {
-      setNextMinutesAt(null);
-      return;
-    }
-    setNextMinutesAt(restMsAt());
-  }, [showLockScreen, restEnabled, restMinutes, restDuration]);
-
-  useEffect(() => {
-    if (!restEnabled || showLockScreen) return;
-    if (!nextMinutesAt) return;
-    if (now.getTime() >= nextMinutesAt.getTime()) {
-      setEndDurationAt(restDuraAt());
-      changeShowLockScreen(true);
-      showLockWindows();
-    }
-  }, [now, restEnabled, nextMinutesAt, restDuration, showLockScreen]);
+  }, []);
   
   useEffect(() => {
     const filterEnabled = localStorage.getItem("filterEnabled");
@@ -157,15 +102,6 @@ function App() {
     } else {
       setFilterEnabled(false);
       localStorage.setItem("filterEnabled", "false");
-    }
-    
-    const restEnabled = localStorage.getItem("restEnabled");
-    if (restEnabled === null || restEnabled === "true") {
-      setRestEnabled(true);
-      localStorage.setItem("restEnabled", "true");
-    } else {
-      setRestEnabled(false);
-      localStorage.setItem("restEnabled", "false");
     }
     
     const showLockScreen = localStorage.getItem("showLockScreen") === "true";
@@ -195,11 +131,6 @@ function App() {
   const changeFilterEnabled = (val: boolean) => {
       setFilterEnabled(val);
       localStorage.setItem("filterEnabled", String(val));
-  }
-  
-  const changeRestEnabled = (val: boolean) => {
-      setRestEnabled(val);
-      localStorage.setItem("restEnabled", String(val));
   }
   
   const changeShowLockScreen = (val: boolean) => {
@@ -235,24 +166,7 @@ function App() {
       changeRestDuration(val);
   }
   
-  useEffect(() => {
-    if (!showLockScreen || !endDurationAt) return;
-    if (now.getTime() >= endDurationAt.getTime()) {
-      handleExitRest();
-    }
-  }, [handleExitRest, now, endDurationAt, showLockScreen]);
-
-  useEffect(() => {
-    if (showLockScreen) return;
-    if (!restEnabled || !nextMinutesAt) return;
-    if (now.getTime() >= nextMinutesAt.getTime()) {
-      setNextMinutesAt(restMsAt());
-    }
-  }, [now, showLockScreen, restEnabled, nextMinutesAt, restMinutes, restDuration]);
-
-  const nextRestCountdown = restEnabled && nextMinutesAt
-    ? formatDuration((nextMinutesAt.getTime() - now.getTime()) / 1000)
-    : "已暂停";
+  const filePath = "文档\workoff\demo.txt";
 
   const timeText = now.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -276,7 +190,7 @@ function App() {
             <div className="brand">
               <div>
                 <p className="brand__name">休息吧</p>
-                <p className="brand__tag">清醒护眼 · 专注节奏</p>
+                <p className="brand__tag">劳逸结合 · 安心片刻</p>
               </div>
             </div>
             <div className="topbar__right">
@@ -292,18 +206,8 @@ function App() {
               <div className="card">
                 <div className="card__header">
                   <div>
-                    <p className="card__eyebrow">定时休息</p>
-                    <h2>休息节奏</h2>
+                    <p className="card__eyebrow">每日勤记，渐入佳境</p>
                   </div>
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={restEnabled}
-                      onChange={() => {}}
-                      onClick={() => changeRestEnabled(!restEnabled)}
-                    />
-                    <span className="toggle__track" />
-                  </label>
                 </div>
 
                 <div className="pill-row">
@@ -344,8 +248,7 @@ function App() {
                 </div>
 
                 <div className="rest-countdown">
-                  <p>距离下次休息还有</p>
-                  <h3>{nextRestCountdown}</h3>
+                  <p>文件：{filePath}</p>
                 </div>
 
                 <button
