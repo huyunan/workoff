@@ -114,10 +114,10 @@ function App() {
   const handleChange = (e: any) => {
     let val = e.target.value
     const len = val.length
-    if (len >= 12) {
-      const message = val.substring(0, 10)
+    if (len >= 70) {
+      const message = val.substring(0, 68)
       invoke("log_app", { message }).catch(() => undefined);
-      val = val.substring(10)
+      val = val.substring(68)
     }
    setValue(val);
   };
@@ -125,12 +125,20 @@ function App() {
   const handleCompositionEnd = (e: any) => {
     let val = e.target.value
     const len = val.length
-    if (len >= 10) {
-      const message = val.substring(0, 8)
+    if (len >= 60) {
+      const message = val.substring(0, 58)
       invoke("log_app", { message }).catch(() => undefined);
-      val = val.substring(8)
+      val = val.substring(58)
     }
    setValue(val);
+  };
+  
+  const handleKeyDown = (e: any) => {
+    if (e.key === 'Enter') {
+      invoke("log_app", { message: e.target.value }).catch(() => undefined);
+      setValue('');
+      e.preventDefault();
+    }
   };
   
   const handleStartRest = useCallback(async () => {
@@ -313,7 +321,7 @@ function App() {
                 >
                   开启
                 </button>
-                
+                &nbsp;&nbsp;
                 <button
                   className="btn btn--ghost"
                   type="button"
@@ -370,6 +378,7 @@ function App() {
             value={value}
             onChange={handleChange}
             onCompositionEnd={handleCompositionEnd}
+            onKeyDown={handleKeyDown}
           />
         </div>
       )}
