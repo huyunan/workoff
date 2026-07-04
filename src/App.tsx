@@ -35,7 +35,7 @@ function App() {
     width: number;
     height: number;
     scale: number;
-    fontSize: number;
+    font_size: number;
     x: number;
     y: number;
   }
@@ -51,7 +51,7 @@ function App() {
       setPosY(screenInfo.y);
       setWidth(screenInfo.width);
       setHeight(screenInfo.height);
-      setFontSize(screenInfo.fontSize);
+      setFontSize(screenInfo.font_size);
       setScreenWidth(screenInfo.screen_width - screenInfo.width);
       setScreenHeight(screenInfo.screen_height - screenInfo.height);
     }).catch(() => undefined);
@@ -75,7 +75,7 @@ function App() {
         screenInfo.height = data.height
       }
       if (data?.fontSize !== undefined) {
-        screenInfo.fontSize = data.fontSize
+        screenInfo.font_size = data.fontSize
       }
       await store.set('screenInfo', screenInfo)
       await store.save();
@@ -138,10 +138,6 @@ function App() {
     }
   };
   
-  const handleStartRest = useCallback(async () => {
-    showLockWindows();
-  }, [posY]);
-  
   const showLockWindows = useCallback(() => {
     invoke("show_lock_windows", {}).catch((error) => console.error("锁屏窗口创建失败", error));
   }, [])
@@ -170,10 +166,6 @@ function App() {
     };
   }, []);
   
-  const handleExitRest = useCallback(() => {
-    hideLockWindows();
-  }, []);
-  
   useEffect(() => {
     const filterEnabled = localStorage.getItem("filterEnabled");
     if (filterEnabled === null || filterEnabled === "true") {
@@ -190,9 +182,16 @@ function App() {
       localStorage.setItem("filterEnabled", String(val));
   }
   
+  const changeLockWindows = (obj: any) => {
+    invoke("change_lock_windows", { obj: JSON.stringify(obj) }).catch((error) =>
+      console.error("修改锁屏窗口失败", error)
+    );
+  }
+  
   const changePosX = useCallback((val: number) => {
       setPosX(val);
       saveStorageSize({x: val});
+      changeLockWindows({x: val});
   }, [setPosX])
   
   const blurPosX = useCallback((val: number) => {
@@ -417,7 +416,7 @@ function App() {
                 <button
                   className="btn btn--ghost"
                   type="button"
-                  onClick={handleStartRest}
+                  onClick={showLockWindows}
                 >
                   开启
                 </button>
@@ -425,7 +424,7 @@ function App() {
                 <button
                   className="btn btn--ghost"
                   type="button"
-                  onClick={handleExitRest}
+                  onClick={hideLockWindows}
                 >
                   关闭
                 </button>

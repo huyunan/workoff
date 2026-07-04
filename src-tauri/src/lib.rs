@@ -1,7 +1,6 @@
 use dirs::document_dir;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use serde_json::from_value;
+use serde_json::{json, Value, from_value};
 use std::env;
 use tauri_plugin_store::{ StoreExt };
 use std::fs::{create_dir_all, File};
@@ -34,7 +33,7 @@ pub struct Config {
     width: f64,
     height: f64,
     scale: f64,
-    fontSize: f64,
+    font_size: f64,
     x: f64,
     y: f64,
 }
@@ -46,7 +45,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
         width: 120.0,
         height: 30.0,
         scale: 1.0,
-        fontSize: 14.0,
+        font_size: 14.0,
         x: -1.0,
         y: -1.0,
     })
@@ -81,7 +80,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 }
                 config.width = prev.width;
                 config.height = prev.height;
-                config.fontSize = prev.fontSize;
+                config.font_size = prev.font_size;
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -89,7 +88,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                     "width": config.width,
                     "height": config.height,
                     "scale": config.scale,
-                    "fontSize": config.fontSize,
+                    "font_size": config.font_size,
                     "x": config.x,
                     "y": config.y,
                 }));
@@ -104,7 +103,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 "width": config.width,
                 "height": config.height,
                 "scale": config.scale,
-                "fontSize": config.fontSize,
+                "font_size": config.font_size,
                 "x": config.x,
                 "y": config.y,
             }));
@@ -175,6 +174,35 @@ fn hide_lock_windows(
         }
     }
     labels.clear();
+    Ok(())
+}
+
+#[tauri::command]
+fn change_lock_windows(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LockState>,
+    obj: String,
+) -> Result<(), String> {
+    let labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
+    for label in labels.iter() {
+        if let Some(window) = app.get_webview_window(label) {
+            let value: Value = serde_json::from_str(&obj).unwrap();
+            if let Some(map) = value.as_object() {
+                if map.contains_key("x") {
+                    println!("scale存在且有值 {} 1", map.get("x").unwrap());
+                } else {
+                    println!("无该字段");
+                }
+
+                if !map.contains_key("y") {
+                    println!("y 属性不存在");
+                }
+            }
+            let _ = window.set_fullscreen(true);
+            let log = format!("change_lock_windows obj {}", obj);
+            append_app_log(&log).map_err(|e| e.to_string())?;
+        }
+    }
     Ok(())
 }
 
@@ -335,6 +363,7 @@ pub fn run() {
             lockscreen_action,
             show_lock_windows,
             hide_lock_windows,
+            change_lock_windows,
             get_default_size,
             log_app
         ])
