@@ -1,7 +1,7 @@
 {
   "name": "workoff",
   "private": true,
-  "version": "1.7.6",
+  "version": "2.0.6",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -139,7 +139,6 @@ function App() {
   };
   
   const handleStartRest = useCallback(async () => {
-    changeShowLockScreen(true);
     showLockWindows();
   }, [posY]);
   
@@ -172,7 +171,6 @@ function App() {
   }, []);
   
   const handleExitRest = useCallback(() => {
-    changeShowLockScreen(false);
     hideLockWindows();
   }, []);
   
@@ -185,23 +183,11 @@ function App() {
       setFilterEnabled(false);
       localStorage.setItem("filterEnabled", "false");
     }
-    
-    const showLockScreen = localStorage.getItem("showLockScreen") === "true";
-    if (showLockScreen) {
-      changeShowLockScreen(true);
-    } else {
-      changeShowLockScreen(false);
-    }
   }, []);
   
   const changeFilterEnabled = (val: boolean) => {
       setFilterEnabled(val);
       localStorage.setItem("filterEnabled", String(val));
-  }
-  
-  const changeShowLockScreen = (val: boolean) => {
-      // setShowLockScreen(val);
-      localStorage.setItem("showLockScreen", String(val));
   }
   
   const changePosX = useCallback((val: number) => {
