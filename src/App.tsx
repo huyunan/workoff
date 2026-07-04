@@ -266,10 +266,10 @@ function App() {
   }, [setFontSize])
   
   const blurFontSize = useCallback((val: number) => {
-      if (val < 1) {
-        val = 1;
-      } else if (val > 100) {
-        val = 100;
+      if (val < 5) {
+        val = 5;
+      } else if (val > 150) {
+        val = 150;
       }
       changeFontSize(val);
   }, [screenHeight])
@@ -355,7 +355,7 @@ function App() {
                     <input
                       className="pill__input"
                       type="number"
-                      min={0}
+                      min={5}
                       max={screenWidth/2}
                       value={width}
                       onChange={(event) =>
@@ -372,7 +372,7 @@ function App() {
                     <input
                       className="pill__input"
                       type="number"
-                      min={0}
+                      min={5}
                       max={screenHeight/2}
                       value={height}
                       onChange={(event) =>
@@ -393,8 +393,8 @@ function App() {
                     <input
                       className="pill__input"
                       type="number"
-                      min={1}
-                      max={100}
+                      min={5}
+                      max={150}
                       value={fontSize}
                       onChange={(event) =>
                         changeFontSize(Number(event.target.value))
@@ -490,6 +490,9 @@ function App() {
           <input
             type="text"
             value={value}
+            style={{
+              fontSize: `${fontSize}px`,
+            }}
             onChange={handleChange}
             onCompositionEnd={handleCompositionEnd}
             onKeyDown={handleKeyDown}
