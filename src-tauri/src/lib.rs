@@ -43,7 +43,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
     Mutex::new(Config {
         screen_width: 1000.0,
         screen_height: 750.0,
-        width: 80.0,
+        width: 120.0,
         height: 30.0,
         scale: 1.0,
         fontSize: 14.0,
@@ -54,7 +54,6 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
 
 #[tauri::command]
 async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
-    append_app_log("获取默认尺寸:get_default_size").map_err(|e| e.to_string())?;
     let monitor_opt = app.primary_monitor().map_err(|e| e.to_string())?;
     if let Some(monitor) = monitor_opt {
         // 动态获取或创建 store
@@ -66,20 +65,14 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
         config.screen_height = (size.height as f64 / config.scale).floor() as f64;
 
         if let Some(value) = store.get("screenInfo") {
-            append_app_log("Some get screenInfo").map_err(|e| e.to_string())?;
             let prev: Config = from_value(value.clone())
                 .map_err(|e| format!("Failed to deserialize: {}", e))?;
             if config.scale != prev.scale
                 || config.screen_width != prev.screen_width
-                || config.screen_height != prev.screen_height
-                || config.width != prev.width
-                || config.height != prev.height
-                || config.fontSize != prev.fontSize {
+                || config.screen_height != prev.screen_height {
                 let x0 = (config.screen_width / 3.0).floor() as f64;
                 let y0 = config.screen_height - 150.0;
-                config.screen_width = config.screen_width - prev.width;
-                config.screen_height = config.screen_height - prev.height;
-                if prev.x > config.screen_width || prev.y > config.screen_height {
+                if prev.x > config.screen_width - prev.width || prev.y > config.screen_height - prev.height {
                     config.x = x0;
                     config.y = y0;
                 } else {
@@ -89,9 +82,6 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 config.width = prev.width;
                 config.height = prev.height;
                 config.fontSize = prev.fontSize;
-
-                let log = format!("Some get screenInfo x {}",config.x);
-                append_app_log(&log).map_err(|e| e.to_string())?;
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -106,11 +96,8 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 store.save().map_err(|e| e.to_string())?;
             }
         } else {
-            append_app_log("Some not get screenInfo").map_err(|e| e.to_string())?;
             config.x = (config.screen_width / 3.0).floor() as f64;
             config.y = config.screen_height - 150.0;
-            config.screen_width = config.screen_width - config.width;
-            config.screen_height = config.screen_height - config.height;
             store.set("screenInfo", json!({
                 "screen_width": config.screen_width,
                 "screen_height": config.screen_height,
@@ -160,6 +147,7 @@ async fn show_lock_windows(
             .resizable(false)
             .drag_and_drop(true)
             .inner_size(width, height)
+            .always_on_top(true)
             .position(x, y)
             .build()
             .map_err(|err| err.to_string())?;

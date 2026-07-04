@@ -22,7 +22,7 @@ function App() {
   const [screenWidth, setScreenWidth] = useState(1000.0);
   const [screenHeight, setScreenHeight] = useState(750.0);
   // 宽度
-  const [width, setWidth] = useState(80);
+  const [width, setWidth] = useState(120);
   // 高度
   const [height, setHeight] = useState(30);
   // 字体大小
@@ -52,8 +52,8 @@ function App() {
       setWidth(screenInfo.width);
       setHeight(screenInfo.height);
       setFontSize(screenInfo.fontSize);
-      setScreenWidth(screenInfo.screen_width);
-      setScreenHeight(screenInfo.screen_height);
+      setScreenWidth(screenInfo.screen_width - screenInfo.width);
+      setScreenHeight(screenInfo.screen_height - screenInfo.height);
     }).catch(() => undefined);
   }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight])
   
@@ -230,7 +230,7 @@ function App() {
         val = screenHeight;
       }
       changePosY(val);
-  }, [])
+  }, [screenHeight])
   
   const changeWidth = useCallback((val: number) => {
       setWidth(val);
@@ -491,7 +491,7 @@ function App() {
             type="text"
             value={value}
             style={{
-              fontSize: `${fontSize}px`,
+              fontSize: `${Number(fontSize)}px`,
             }}
             onChange={handleChange}
             onCompositionEnd={handleCompositionEnd}
