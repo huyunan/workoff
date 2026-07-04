@@ -11,7 +11,7 @@ use std::sync::{
     LazyLock, Mutex,
 };
 use tauri::{
-    menu::MenuBuilder,
+    menu::MenuBuilder,LogicalSize,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -188,19 +188,53 @@ fn change_lock_windows(
         if let Some(window) = app.get_webview_window(label) {
             let value: Value = serde_json::from_str(&obj).unwrap();
             if let Some(map) = value.as_object() {
-                if map.contains_key("x") {
-                    println!("scale存在且有值 {} 1", map.get("x").unwrap());
-                } else {
-                    println!("无该字段");
-                }
-
-                if !map.contains_key("y") {
-                    println!("y 属性不存在");
+                let store = app.store("config.json").map_err(|e| e.to_string())?;
+                
+                let mut config = CONFIG.lock().unwrap();
+                if let Some(value) = store.get("screenInfo") {
+                    let prev: Config = from_value(value.clone())
+                        .map_err(|e| format!("Failed to deserialize: {}", e))?;
+                    config.x = prev.x;
+                    config.y = prev.y;
+                    config.width = prev.width;
+                    config.height = prev.height;
+                    config.font_size = prev.font_size;
+                    config.scale = prev.scale;
+                    config.screen_width = prev.screen_width;
+                    config.screen_height = prev.screen_height;
+                    if map.contains_key("x") {
+                        let x = map.get("x").unwrap().as_f64().unwrap();
+                        config.x = x;
+                        let _ = window.set_position(tauri::PhysicalPosition::new(x, config.y)).map_err(|e| e.to_string())?;
+                    }
+                    if map.contains_key("y") {
+                        let y = map.get("y").unwrap().as_f64().unwrap();
+                        config.y = y;
+                        let _ = window.set_position(tauri::PhysicalPosition::new(config.x, y)).map_err(|e| e.to_string())?;
+                    }
+                    if map.contains_key("width") {
+                        let width = map.get("width").unwrap().as_f64().unwrap();
+                        config.width = width;
+                        let _ = window.set_size(LogicalSize::new(width, config.height)).map_err(|e| e.to_string())?;
+                    }
+                    if map.contains_key("height") {
+                        let height = map.get("height").unwrap().as_f64().unwrap();
+                        config.height = height;
+                        let _ = window.set_size(LogicalSize::new(config.width, height)).map_err(|e| e.to_string())?;
+                    }
+                    store.set("screenInfo", json!({
+                        "screen_width": config.screen_width,
+                        "screen_height": config.screen_height,
+                        "width": config.width,
+                        "height": config.height,
+                        "scale": config.scale,
+                        "font_size": config.font_size,
+                        "x": config.x,
+                        "y": config.y,
+                    }));
+                    store.save().map_err(|e| e.to_string())?;
                 }
             }
-            let _ = window.set_fullscreen(true);
-            let log = format!("change_lock_windows obj {}", obj);
-            append_app_log(&log).map_err(|e| e.to_string())?;
         }
     }
     Ok(())
