@@ -22,9 +22,9 @@ function App() {
   const [screenWidth, setScreenWidth] = useState(1000.0);
   const [screenHeight, setScreenHeight] = useState(750.0);
   // 宽度
-  // const [width, setWidth] = useState(80);
-  // // 高度
-  // const [height, setHeight] = useState(30);
+  const [width, setWidth] = useState(80);
+  // 高度
+  const [height, setHeight] = useState(30);
   // 显示锁屏弹框
   // const [showLockScreen, setShowLockScreen] = useState(false);
   interface ConfigType {
@@ -46,10 +46,12 @@ function App() {
       if (screenInfo === undefined) return
       setPosX(screenInfo.x);
       setPosY(screenInfo.y);
+      setWidth(screenInfo.width);
+      setHeight(screenInfo.height);
       setScreenWidth(screenInfo.screen_width);
       setScreenHeight(screenInfo.screen_height);
     }).catch(() => undefined);
-  }, [setPosX, setPosY])
+  }, [setPosX, setPosY, setWidth, setHeight, setScreenWidth, setScreenHeight])
   
   const saveStorageSize = useCallback(async (data: any) => {
     const store = await Store.load('config.json');
@@ -62,28 +64,16 @@ function App() {
       if (data?.y !== undefined) {
         screenInfo.y = data.y
       }
+      if (data?.width !== undefined) {
+        screenInfo.width = data.width
+      }
+      if (data?.height !== undefined) {
+        screenInfo.height = data.height
+      }
       await store.set('screenInfo', screenInfo)
       await store.save();
     }
   }, [])
-  
-  // const getNewPos = useCallback((oldx: any, oldy: any) => {
-  //   let x = oldx, y = oldy;
-  //   if (oldx < 0) {
-  //     x = 0
-  //   }
-  //   if (oldx > size.screen_width - 80.0) {
-  //     x = size.screen_width - 80.0
-  //   }
-  //   if (oldy < 0) {
-  //     y = 0
-  //   }
-  //   if (oldy > size.screen_height - 30.0) {
-  //     y = size.screen_width - 30.0
-  //   }
-  //   return [x, y]
-  // }, [])
-  
   
   useEffect(() => {
     const id = setTimeout(async() => {
@@ -235,6 +225,34 @@ function App() {
       changePosY(val);
   }, [])
   
+  const changeWidth = useCallback((val: number) => {
+      setWidth(val);
+      saveStorageSize({width: val});
+  }, [setWidth])
+  
+  const blurWidth = useCallback((val: number) => {
+      if (val < 5) {
+        val = 5;
+      } else if (val > screenWidth / 2) {
+        val = screenWidth / 2;
+      }
+      changeWidth(val);
+  }, [screenWidth])
+  
+  const changeHeight = useCallback((val: number) => {
+      setHeight(val);
+      saveStorageSize({height: val});
+  }, [setHeight])
+  
+  const blurHeight = useCallback((val: number) => {
+      if (val < 5) {
+        val = 5;
+      } else if (val > screenHeight / 2) {
+        val = screenHeight / 2;
+      }
+      changeHeight(val);
+  }, [screenHeight])
+  
   const filePath = "文档\\workoff\\demo.txt";
   const dateText = new Date().toLocaleDateString("zh-CN", {
     month: "long",
@@ -289,7 +307,7 @@ function App() {
                         blurPosX(Number(event.target.value))
                       }
                     />
-                    <span>px</span>
+                    <span className="pill__span">px</span>
                   </div>
                   <div className="pill">
                     <p className="pill__label">位置 Y</p>
@@ -306,7 +324,44 @@ function App() {
                         blurPosY(Number(event.target.value))
                       }
                     />
-                    <span>px</span>
+                    <span className="pill__span">px</span>
+                  </div>
+                </div>
+                
+                <div className="pill-row">
+                  <div className="pill">
+                    <p className="pill__label">长度</p>
+                    <input
+                      className="pill__input"
+                      type="number"
+                      min={0}
+                      max={screenWidth/2}
+                      value={width}
+                      onChange={(event) =>
+                        changeWidth(Number(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        blurWidth(Number(event.target.value))
+                      }
+                    />
+                    <span className="pill__span">px</span>
+                  </div>
+                  <div className="pill">
+                    <p className="pill__label">宽度</p>
+                    <input
+                      className="pill__input"
+                      type="number"
+                      min={0}
+                      max={screenHeight/2}
+                      value={height}
+                      onChange={(event) =>
+                        changeHeight(Number(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        blurHeight(Number(event.target.value))
+                      }
+                    />
+                    <span className="pill__span">px</span>
                   </div>
                 </div>
 
