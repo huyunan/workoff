@@ -25,6 +25,8 @@ function App() {
   const [width, setWidth] = useState(80);
   // 高度
   const [height, setHeight] = useState(30);
+  // 字体大小
+  const [fontSize, setFontSize] = useState(14);
   // 显示锁屏弹框
   // const [showLockScreen, setShowLockScreen] = useState(false);
   interface ConfigType {
@@ -33,6 +35,7 @@ function App() {
     width: number;
     height: number;
     scale: number;
+    fontSize: number;
     x: number;
     y: number;
   }
@@ -48,10 +51,11 @@ function App() {
       setPosY(screenInfo.y);
       setWidth(screenInfo.width);
       setHeight(screenInfo.height);
+      setFontSize(screenInfo.fontSize);
       setScreenWidth(screenInfo.screen_width);
       setScreenHeight(screenInfo.screen_height);
     }).catch(() => undefined);
-  }, [setPosX, setPosY, setWidth, setHeight, setScreenWidth, setScreenHeight])
+  }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight])
   
   const saveStorageSize = useCallback(async (data: any) => {
     const store = await Store.load('config.json');
@@ -69,6 +73,9 @@ function App() {
       }
       if (data?.height !== undefined) {
         screenInfo.height = data.height
+      }
+      if (data?.fontSize !== undefined) {
+        screenInfo.fontSize = data.fontSize
       }
       await store.set('screenInfo', screenInfo)
       await store.save();
@@ -253,6 +260,20 @@ function App() {
       changeHeight(val);
   }, [screenHeight])
   
+  const changeFontSize = useCallback((val: number) => {
+      setFontSize(val);
+      saveStorageSize({fontSize: val});
+  }, [setFontSize])
+  
+  const blurFontSize = useCallback((val: number) => {
+      if (val < 1) {
+        val = 1;
+      } else if (val > 100) {
+        val = 100;
+      }
+      changeFontSize(val);
+  }, [screenHeight])
+  
   const filePath = "文档\\workoff\\demo.txt";
   const dateText = new Date().toLocaleDateString("zh-CN", {
     month: "long",
@@ -363,6 +384,44 @@ function App() {
                     />
                     <span className="pill__span">px</span>
                   </div>
+                </div>
+                
+                
+                <div className="pill-row">
+                  <div className="pill">
+                    <p className="pill__label">字体</p>
+                    <input
+                      className="pill__input"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={fontSize}
+                      onChange={(event) =>
+                        changeFontSize(Number(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        blurFontSize(Number(event.target.value))
+                      }
+                    />
+                    <span className="pill__span">px</span>
+                  </div>
+                  {/* <div className="pill">
+                    <p className="pill__label">宽度</p>
+                    <input
+                      className="pill__input"
+                      type="number"
+                      min={0}
+                      max={screenHeight/2}
+                      value={height}
+                      onChange={(event) =>
+                        changeHeight(Number(event.target.value))
+                      }
+                      onBlur={(event) =>
+                        blurHeight(Number(event.target.value))
+                      }
+                    />
+                    <span className="pill__span">px</span>
+                  </div> */}
                 </div>
 
                 <div className="rest-countdown">

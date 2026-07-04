@@ -34,6 +34,7 @@ pub struct Config {
     width: f64,
     height: f64,
     scale: f64,
+    fontSize: f64,
     x: f64,
     y: f64,
 }
@@ -45,6 +46,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
         width: 80.0,
         height: 30.0,
         scale: 1.0,
+        fontSize: 14.0,
         x: -1.0,
         y: -1.0,
     })
@@ -71,7 +73,8 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 || config.screen_width != prev.screen_width
                 || config.screen_height != prev.screen_height
                 || config.width != prev.width
-                || config.height != prev.height {
+                || config.height != prev.height
+                || config.fontSize != prev.fontSize {
                 let x0 = (config.screen_width / 3.0).floor() as f64;
                 let y0 = config.screen_height - 150.0;
                 config.screen_width = config.screen_width - prev.width;
@@ -85,6 +88,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 }
                 config.width = prev.width;
                 config.height = prev.height;
+                config.fontSize = prev.fontSize;
 
                 let log = format!("Some get screenInfo x {}",config.x);
                 append_app_log(&log).map_err(|e| e.to_string())?;
@@ -95,6 +99,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                     "width": config.width,
                     "height": config.height,
                     "scale": config.scale,
+                    "fontSize": config.fontSize,
                     "x": config.x,
                     "y": config.y,
                 }));
@@ -112,6 +117,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 "width": config.width,
                 "height": config.height,
                 "scale": config.scale,
+                "fontSize": config.fontSize,
                 "x": config.x,
                 "y": config.y,
             }));
