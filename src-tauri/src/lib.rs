@@ -11,7 +11,7 @@ use std::sync::{
     LazyLock, Mutex,
 };
 use tauri::{
-    menu::MenuBuilder,LogicalSize,
+    menu::MenuBuilder,LogicalSize,LogicalPosition,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -42,7 +42,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
     Mutex::new(Config {
         screen_width: 1000.0,
         screen_height: 750.0,
-        width: 120.0,
+        width: 80.0,
         height: 30.0,
         scale: 1.0,
         font_size: 14.0,
@@ -145,7 +145,6 @@ async fn show_lock_windows(
             .transparent(false)
             .resizable(false)
             .drag_and_drop(true)
-            .inner_size(width, height)
             .always_on_top(true)
             .position(x, y)
             .build()
@@ -154,6 +153,7 @@ async fn show_lock_windows(
         apply_default_window_icon(&app, &window);
         let _ = window.set_fullscreen(false);
         let _ = window.set_focus();
+        let _ = window.set_size(LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
         labels.push(label);
     }
     Ok(())
@@ -202,15 +202,16 @@ fn change_lock_windows(
                     config.scale = prev.scale;
                     config.screen_width = prev.screen_width;
                     config.screen_height = prev.screen_height;
+                    let _ = window.show();
                     if map.contains_key("x") {
                         let x = map.get("x").unwrap().as_f64().unwrap();
                         config.x = x;
-                        let _ = window.set_position(tauri::PhysicalPosition::new(x, config.y)).map_err(|e| e.to_string())?;
+                        let _ = window.set_position(LogicalPosition::new(x, config.y)).map_err(|e| e.to_string())?;
                     }
                     if map.contains_key("y") {
                         let y = map.get("y").unwrap().as_f64().unwrap();
                         config.y = y;
-                        let _ = window.set_position(tauri::PhysicalPosition::new(config.x, y)).map_err(|e| e.to_string())?;
+                        let _ = window.set_position(LogicalPosition::new(config.x, y)).map_err(|e| e.to_string())?;
                     }
                     if map.contains_key("width") {
                         let width = map.get("width").unwrap().as_f64().unwrap();
@@ -221,6 +222,10 @@ fn change_lock_windows(
                         let height = map.get("height").unwrap().as_f64().unwrap();
                         config.height = height;
                         let _ = window.set_size(LogicalSize::new(config.width, height)).map_err(|e| e.to_string())?;
+                    }
+                    if map.contains_key("font_size") {
+                        let font_size = map.get("font_size").unwrap().as_f64().unwrap();
+                        config.font_size = font_size;
                     }
                     store.set("screenInfo", json!({
                         "screen_width": config.screen_width,

@@ -22,7 +22,7 @@ function App() {
   const [screenWidth, setScreenWidth] = useState(1000.0);
   const [screenHeight, setScreenHeight] = useState(750.0);
   // 宽度
-  const [width, setWidth] = useState(120);
+  const [width, setWidth] = useState(80);
   // 高度
   const [height, setHeight] = useState(30);
   // 字体大小
@@ -56,31 +56,6 @@ function App() {
       setScreenHeight(screenInfo.screen_height - screenInfo.height);
     }).catch(() => undefined);
   }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight])
-  
-  const saveStorageSize = useCallback(async (data: any) => {
-    // const store = await Store.load('config.json');
-    //   // 读取
-    // const screenInfo: ConfigType | undefined = await store.get('screenInfo');
-    // if (screenInfo !== undefined) {
-    //   if (data?.x !== undefined) {
-    //     screenInfo.x = data.x
-    //   }
-    //   if (data?.y !== undefined) {
-    //     screenInfo.y = data.y
-    //   }
-    //   if (data?.width !== undefined) {
-    //     screenInfo.width = data.width
-    //   }
-    //   if (data?.height !== undefined) {
-    //     screenInfo.height = data.height
-    //   }
-    //   if (data?.fontSize !== undefined) {
-    //     screenInfo.font_size = data.fontSize
-    //   }
-    //   await store.set('screenInfo', screenInfo)
-    //   await store.save();
-    // }
-  }, [])
   
   useEffect(() => {
     const id = setTimeout(async() => {
@@ -190,7 +165,6 @@ function App() {
   
   const changePosX = useCallback((val: number) => {
       setPosX(val);
-      saveStorageSize({x: val});
       changeLockWindows({x: val});
   }, [setPosX])
   
@@ -205,7 +179,6 @@ function App() {
   
   const changePosY = useCallback((val: number) => {
       setPosY(val);
-      saveStorageSize({y: val});
       changeLockWindows({y: val});
   }, [setPosY])
   
@@ -220,7 +193,6 @@ function App() {
   
   const changeWidth = useCallback((val: number) => {
       setWidth(val);
-      saveStorageSize({width: val});
       changeLockWindows({width: val});
   }, [setWidth])
   
@@ -235,7 +207,6 @@ function App() {
   
   const changeHeight = useCallback((val: number) => {
       setHeight(val);
-      saveStorageSize({height: val});
       changeLockWindows({height: val});
   }, [setHeight])
   
@@ -250,7 +221,6 @@ function App() {
   
   const changeFontSize = useCallback((val: number) => {
       setFontSize(val);
-      saveStorageSize({fontSize: val});
       changeLockWindows({fontSize: val});
   }, [setFontSize])
   
