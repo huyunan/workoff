@@ -221,7 +221,7 @@ function App() {
   
   const changeFontSize = useCallback((val: number) => {
       setFontSize(val);
-      changeLockWindows({fontSize: val});
+      changeLockWindows({font_size: val});
   }, [setFontSize])
   
   const blurFontSize = useCallback((val: number) => {

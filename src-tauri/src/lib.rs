@@ -126,6 +126,10 @@ async fn show_lock_windows(
                 let _ = window.show();
                 let _ = window.set_focus();
             }
+            let Some(main_window) = app.get_webview_window("main") else {
+                return Ok(());
+            };
+            let _ = main_window.hide();
         }
         return Ok(());
     }
@@ -156,6 +160,11 @@ async fn show_lock_windows(
         let _ = window.set_always_on_top(true);
         let _ = window.set_size(LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
         labels.push(label);
+        
+        let Some(main_window) = app.get_webview_window("main") else {
+            return Ok(());
+        };
+        let _ = main_window.hide();
     }
     Ok(())
 }
@@ -203,6 +212,9 @@ fn change_lock_windows(
                     config.scale = prev.scale;
                     config.screen_width = prev.screen_width;
                     config.screen_height = prev.screen_height;
+                    let _ = window.set_always_on_top(true);
+                    let _ = window.show();
+                    let _ = window.set_focus();
                     if map.contains_key("x") {
                         let x = map.get("x").unwrap().as_f64().unwrap();
                         config.x = x;
