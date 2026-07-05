@@ -122,7 +122,7 @@ async fn show_lock_windows(
     if !labels.is_empty() {
         for label in labels.iter() {
             if let Some(window) = app.get_webview_window(label) {
-                let _ = window.set_always_on_top(true);
+                let _ = window.set_always_on_top(false);
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -157,7 +157,7 @@ async fn show_lock_windows(
         apply_default_window_icon(&app, &window);
         let _ = window.set_fullscreen(false);
         let _ = window.set_focus();
-        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
         let _ = window.set_size(LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
         labels.push(label);
         
@@ -212,7 +212,7 @@ fn change_lock_windows(
                     config.scale = prev.scale;
                     config.screen_width = prev.screen_width;
                     config.screen_height = prev.screen_height;
-                    let _ = window.set_always_on_top(true);
+                    let _ = window.set_always_on_top(false);
                     let _ = window.show();
                     let _ = window.set_focus();
                     if map.contains_key("x") {
