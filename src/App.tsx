@@ -16,6 +16,8 @@ function App() {
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
+  // 阴影开关
+  const [shadow, setShadow] = useState(true);
   // 位置 X
   const [posX, setPosX] = useState(100);
   // 位置 Y
@@ -39,6 +41,7 @@ function App() {
     font_size: number;
     x: number;
     y: number;
+    shadow: boolean;
   }
   
   // 获取全部屏幕尺寸
@@ -55,8 +58,9 @@ function App() {
       setFontSize(screenInfo.font_size);
       setScreenWidth(screenInfo.screen_width - screenInfo.width);
       setScreenHeight(screenInfo.screen_height - screenInfo.height);
+      setShadow(screenInfo.shadow);
     }).catch(() => undefined);
-  }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight])
+  }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight, setShadow])
   
   useEffect(() => {
     const id = setTimeout(async() => {
@@ -158,6 +162,11 @@ function App() {
       localStorage.setItem("filterEnabled", String(val));
   }
   
+  const changeShadow = async (val: boolean) => {
+      await saveStorageSize({shadow: val});
+      setShadow(val);
+  }
+  
   const changeLockWindows = (obj: any) => {
     invoke("change_lock_windows", { obj: JSON.stringify(obj) }).catch((error) =>
       console.error("修改锁屏窗口失败", error)
@@ -183,6 +192,9 @@ function App() {
       }
       if (data?.font_size !== undefined) {
         screenInfo.font_size = data.font_size
+      }
+      if (data?.shadow !== undefined) {
+        screenInfo.shadow = data.shadow
       }
       await store.set('screenInfo', screenInfo)
       await store.save();
@@ -504,8 +516,19 @@ function App() {
                       <input
                         type="checkbox"
                         checked={filterEnabled}
-                        onChange={() => {}}
                         onClick={() => changeFilterEnabled(!filterEnabled)}
+                      />
+                      <span className="toggle__track" />
+                    </label>
+                  </label>
+
+                  <label className="setting-row">
+                    <span>阴影开关</span>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={shadow}
+                        onClick={() => changeShadow(!shadow)}
                       />
                       <span className="toggle__track" />
                     </label>
@@ -517,7 +540,6 @@ function App() {
                       <input
                         type="checkbox"
                         checked={filterEnabled}
-                        onChange={() => {}}
                         onClick={() => changeFilterEnabled(!filterEnabled)}
                       />
                       <span className="toggle__track" />
@@ -531,7 +553,7 @@ function App() {
       )}
       
       {isLockWindow && (
-        <div className="lockscreen">
+        <div className="lockscreen" data-tauri-drag-region>
           <input
             type="text"
             value={value}

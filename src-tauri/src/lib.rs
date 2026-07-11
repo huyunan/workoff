@@ -36,6 +36,7 @@ pub struct Config {
     font_size: f64,
     x: f64,
     y: f64,
+    shadow: bool,
 }
 
 static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
@@ -48,6 +49,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
         font_size: 14.0,
         x: -1.0,
         y: -1.0,
+        shadow: true,
     })
 });
 
@@ -81,6 +83,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 config.width = prev.width;
                 config.height = prev.height;
                 config.font_size = prev.font_size;
+                config.shadow = prev.shadow;
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -91,6 +94,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                     "font_size": config.font_size,
                     "x": config.x,
                     "y": config.y,
+                    "shadow": config.shadow,
                 }));
                 store.save().map_err(|e| e.to_string())?;
             }
@@ -106,6 +110,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 "font_size": config.font_size,
                 "x": config.x,
                 "y": config.y,
+                "shadow": config.shadow,
             }));
             store.save().map_err(|e| e.to_string())?;
         }
@@ -147,6 +152,7 @@ async fn show_lock_windows(
         let window = WebviewWindowBuilder::new(&app, label.clone(), WebviewUrl::App(url.into()))
             .decorations(false)
             .transparent(false)
+            .shadow(size.shadow)
             .resizable(false)
             .drag_and_drop(true)
             .always_on_top(true)
@@ -213,6 +219,7 @@ fn change_lock_windows(
                     config.scale = prev.scale;
                     config.screen_width = prev.screen_width;
                     config.screen_height = prev.screen_height;
+                    config.shadow = prev.shadow;
                     let _ = window.set_always_on_top(false);
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -240,6 +247,11 @@ fn change_lock_windows(
                         let font_size = map.get("font_size").unwrap().as_f64().unwrap();
                         config.font_size = font_size;
                     }
+                    if map.contains_key("shadow") {
+                        let shadow = map.get("shadow").unwrap().as_bool().unwrap();
+                        config.shadow = shadow;
+                        let _ = window.set_shadow(shadow).map_err(|e| e.to_string())?;
+                    }
                     store.set("screenInfo", json!({
                         "screen_width": config.screen_width,
                         "screen_height": config.screen_height,
@@ -249,6 +261,7 @@ fn change_lock_windows(
                         "font_size": config.font_size,
                         "x": config.x,
                         "y": config.y,
+                        "shadow": config.shadow,
                     }));
                     store.save().map_err(|e| e.to_string())?;
                 }
