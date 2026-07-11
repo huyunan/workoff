@@ -340,6 +340,38 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+            let shift_1_shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::Digit2);
+            let app_handle = app.handle();
+            app_handle.plugin(
+                tauri_plugin_global_shortcut::Builder::new().with_handler({
+                    let app_handle = app_handle.clone();
+                    let shift_1_shortcut = shift_1_shortcut.clone();
+                    move |_app, shortcut, event| {
+                        if shortcut == &shift_1_shortcut {
+                            match event.state() {
+                                ShortcutState::Pressed => {
+                                    let mut window_main = None;
+                                    for (_label, window) in app_handle.webview_windows() {
+                                        if _label.as_str().starts_with("main") {
+                                            window_main = window.clone().into();
+                                        }
+                                    }
+                                    
+                                    if let Some(window) = window_main {
+                                        let _ = window.emit("send-action", "code2");
+                                    }
+                                }
+                                ShortcutState::Released => {
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(),
+            )?;
+            app.global_shortcut().register(shift_1_shortcut)?;
+            
             let handle = app.handle().clone();
             get_default_size(handle);
             if let Some(window) = app.get_webview_window("main") {

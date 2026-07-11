@@ -15,8 +15,8 @@ import "./App.css";
 function App() {
   const isLockWindow =
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
-  // 过滤蓝光开关
-  const [filterEnabled, setFilterEnabled] = useState(true);
+  // 开启关闭快捷键
+  const [autoKeyEnabled, setAutoKeyEnabled] = useState(true);
   // 开机自启
   const [startupEnabled, setStartupEnabled] = useState(false);
   // 阴影开关
@@ -33,8 +33,6 @@ function App() {
   const [height, setHeight] = useState(30);
   // 字体大小
   const [fontSize, setFontSize] = useState(14);
-  // 显示锁屏弹框
-  // const [showLockScreen, setShowLockScreen] = useState(false);
   interface ConfigType {
     screen_width: number;
     screen_height: number;
@@ -133,10 +131,10 @@ function App() {
   
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<ConfigType>('default-size', (event) => {
-      console.log(
-        `downloading ${event.payload}`
-      );
+    listen<ConfigType | string>('send-action', (event) => {
+      if (event.payload === "code2") {
+        registerKey();
+      }
     })
     .then((fn) => {
       unlisten = fn;
@@ -149,6 +147,15 @@ function App() {
     };
   }, []);
   
+  const registerKey = () => {
+    if (localStorage.getItem("autoKeyEnabled") !== "true") return;
+    if (isLockWindow) {
+      hideLockWindows();
+    } else {
+      showLockWindows();
+    }
+  }
+  
   useEffect(() => {
     const startupEnabled = localStorage.getItem("startupEnabled") === "true";
     if (startupEnabled) {
@@ -160,19 +167,19 @@ function App() {
     }
     localStorage.setItem("startupEnabled", String(startupEnabled));
     
-    const filterEnabled = localStorage.getItem("filterEnabled");
-    if (filterEnabled === null || filterEnabled === "true") {
-      setFilterEnabled(true);
-      localStorage.setItem("filterEnabled", "true");
+    const autoKeyEnabled = localStorage.getItem("autoKeyEnabled");
+    if (autoKeyEnabled === null || autoKeyEnabled === "true") {
+      setAutoKeyEnabled(true);
+      localStorage.setItem("autoKeyEnabled", "true");
     } else {
-      setFilterEnabled(false);
-      localStorage.setItem("filterEnabled", "false");
+      setAutoKeyEnabled(false);
+      localStorage.setItem("autoKeyEnabled", "false");
     }
   }, []);
   
-  const changeFilterEnabled = (val: boolean) => {
-      setFilterEnabled(val);
-      localStorage.setItem("filterEnabled", String(val));
+  const changeAutoKeyEnabled = (val: boolean) => {
+      setAutoKeyEnabled(val);
+      localStorage.setItem("autoKeyEnabled", String(val));
   }
   
   const changeStartupEnabled = async (val: boolean) => {
@@ -560,12 +567,12 @@ function App() {
                   </label>
 
                   <label className="setting-row">
-                    <span>定时快捷键</span>
+                    <span>开启关闭快捷键（Alt + Shift + 2）</span>
                     <label className="toggle">
                       <input
                         type="checkbox"
-                        checked={filterEnabled}
-                        onClick={() => changeFilterEnabled(!filterEnabled)}
+                        checked={autoKeyEnabled}
+                        onClick={() => changeAutoKeyEnabled(!autoKeyEnabled)}
                       />
                       <span className="toggle__track" />
                     </label>
