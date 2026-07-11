@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -163,75 +164,170 @@ function App() {
     );
   }
   
-  const changePosX = useCallback((val: number) => {
-      setPosX(val);
-      changeLockWindows({x: val});
-  }, [setPosX])
+  const saveStorageSize = useCallback(async (data: any) => {
+    const store = await Store.load('config.json');
+      // 读取
+    const screenInfo: ConfigType | undefined = await store.get('screenInfo');
+    if (screenInfo !== undefined) {
+      if (data?.x !== undefined) {
+        screenInfo.x = data.x
+      }
+      if (data?.y !== undefined) {
+        screenInfo.y = data.y
+      }
+      if (data?.width !== undefined) {
+        screenInfo.width = data.width
+      }
+      if (data?.height !== undefined) {
+        screenInfo.height = data.height
+      }
+      if (data?.font_size !== undefined) {
+        screenInfo.font_size = data.font_size
+      }
+      await store.set('screenInfo', screenInfo)
+      await store.save();
+    }
+  }, [])
   
-  const blurPosX = useCallback((val: number) => {
+  const posXRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = posXRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  
+  const changePosX = useCallback(async (val: number) => {
       if (val < 0) {
         val = 0;
       } else if (val > screenWidth) {
         val = screenWidth;
       }
-      changePosX(val);
+      await saveStorageSize({x: val});
+      setPosX(val);
   }, [screenWidth])
   
-  const changePosY = useCallback((val: number) => {
-      setPosY(val);
-      changeLockWindows({y: val});
-  }, [setPosY])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      changeLockWindows({x: posX});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [posX])
   
-  const blurPosY = useCallback((val: number) => {
+  const posYRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = posYRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  
+  const changePosY = useCallback(async (val: number) => {
       if (val < 0) {
         val = 0;
       } else if (val > screenHeight) {
         val = screenHeight;
       }
-      changePosY(val);
+      await saveStorageSize({y: val});
+      setPosY(val);
   }, [screenHeight])
   
-  const changeWidth = useCallback((val: number) => {
-      setWidth(val);
-      changeLockWindows({width: val});
-  }, [setWidth])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      changeLockWindows({y: posY});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [posY])
   
-  const blurWidth = useCallback((val: number) => {
+  const widthRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = widthRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  
+  const changeWidth = useCallback(async (val: number) => {
       if (val < 5) {
         val = 5;
       } else if (val > screenWidth / 2) {
         val = screenWidth / 2;
       }
-      changeWidth(val);
+      await saveStorageSize({width: val});
+      setWidth(val);
   }, [screenWidth])
   
-  const changeHeight = useCallback((val: number) => {
-      setHeight(val);
-      changeLockWindows({height: val});
-  }, [setHeight])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      changeLockWindows({width: width});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [width])
   
-  const blurHeight = useCallback((val: number) => {
+  const heightRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = heightRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  
+  const changeHeight = useCallback(async (val: number) => {
       if (val < 5) {
         val = 5;
       } else if (val > screenHeight / 2) {
         val = screenHeight / 2;
       }
-      changeHeight(val);
+      await saveStorageSize({height: val});
+      setHeight(val);
   }, [screenHeight])
   
-  const changeFontSize = useCallback((val: number) => {
-      setFontSize(val);
-      changeLockWindows({font_size: val});
-  }, [setFontSize])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      changeLockWindows({height: height});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [height])
   
-  const blurFontSize = useCallback((val: number) => {
+  const fontSizeRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = fontSizeRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+  
+  const changeFontSize = useCallback(async (val: number) => {
       if (val < 5) {
         val = 5;
       } else if (val > 150) {
         val = 150;
       }
-      changeFontSize(val);
-  }, [screenHeight])
+      await saveStorageSize({font_size: val});
+      setFontSize(val);
+  }, [])
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      changeLockWindows({font_size: fontSize});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [fontSize])
   
   const filePath = "文档\\workoff\\demo.txt";
   const dateText = new Date().toLocaleDateString("zh-CN", {
@@ -280,11 +376,9 @@ function App() {
                       min={0}
                       max={screenWidth}
                       value={posX}
+                      ref={posXRef}
                       onChange={(event) =>
                         changePosX(Number(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        blurPosX(Number(event.target.value))
                       }
                     />
                     <span className="pill__span">px</span>
@@ -297,11 +391,9 @@ function App() {
                       min={0}
                       max={screenHeight}
                       value={posY}
+                      ref={posYRef}
                       onChange={(event) =>
                         changePosY(Number(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        blurPosY(Number(event.target.value))
                       }
                     />
                     <span className="pill__span">px</span>
@@ -317,11 +409,9 @@ function App() {
                       min={5}
                       max={screenWidth/2}
                       value={width}
+                      ref={widthRef}
                       onChange={(event) =>
                         changeWidth(Number(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        blurWidth(Number(event.target.value))
                       }
                     />
                     <span className="pill__span">px</span>
@@ -334,11 +424,9 @@ function App() {
                       min={5}
                       max={screenHeight/2}
                       value={height}
+                      ref={heightRef}
                       onChange={(event) =>
                         changeHeight(Number(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        blurHeight(Number(event.target.value))
                       }
                     />
                     <span className="pill__span">px</span>
@@ -355,11 +443,9 @@ function App() {
                       min={5}
                       max={150}
                       value={fontSize}
+                      ref={fontSizeRef}
                       onChange={(event) =>
                         changeFontSize(Number(event.target.value))
-                      }
-                      onBlur={(event) =>
-                        blurFontSize(Number(event.target.value))
                       }
                     />
                     <span className="pill__span">px</span>
