@@ -559,6 +559,9 @@ function App() {
             value={value}
             style={{
               fontSize: `${Number(fontSize)}px`,
+              height: shadow ? `100vh` : `calc(100vh - 1px)`,
+              width: shadow ? `100vw` : `calc(100vw - 1px)`,
+              border: shadow ? `none` : `1px solid #aeaeae`,
             }}
             onChange={handleChange}
             onCompositionEnd={handleCompositionEnd}
