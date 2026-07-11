@@ -132,7 +132,7 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen<ConfigType | string>('send-action', (event) => {
-      if (event.payload === "code2") {
+      if (event.payload === "code1") {
         registerKey();
       }
     })
@@ -567,7 +567,7 @@ function App() {
                   </label>
 
                   <label className="setting-row">
-                    <span>开启关闭快捷键（Alt + Shift + 2）</span>
+                    <span>开启关闭快捷键（Alt + Shift + 1）</span>
                     <label className="toggle">
                       <input
                         type="checkbox"

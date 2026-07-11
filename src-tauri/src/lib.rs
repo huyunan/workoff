@@ -341,7 +341,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-            let shift_1_shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::Digit2);
+            let shift_1_shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::Digit1);
             let app_handle = app.handle();
             app_handle.plugin(
                 tauri_plugin_global_shortcut::Builder::new().with_handler({
@@ -359,7 +359,7 @@ pub fn run() {
                                     }
                                     
                                     if let Some(window) = window_main {
-                                        let _ = window.emit("send-action", "code2");
+                                        let _ = window.emit("send-action", "code1");
                                     }
                                 }
                                 ShortcutState::Released => {
