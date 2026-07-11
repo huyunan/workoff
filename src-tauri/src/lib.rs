@@ -125,18 +125,25 @@ async fn show_lock_windows(
 ) -> Result<(), String> {
     let mut labels = state.labels.lock().map_err(|_| "锁状态被占用")?;
     if !labels.is_empty() {
+        let mut clear_flg = false;
         for label in labels.iter() {
             if let Some(window) = app.get_webview_window(label) {
                 let _ = window.set_always_on_top(false);
                 let _ = window.show();
                 let _ = window.set_focus();
+            } else {
+                clear_flg = true;
             }
             // let Some(main_window) = app.get_webview_window("main") else {
             //     return Ok(());
             // };
             // let _ = main_window.hide();
         }
-        return Ok(());
+        if clear_flg {
+            labels.clear();
+        } else {
+            return Ok(());
+        }
     }
     let store = app.store("config.json").map_err(|e| e.to_string())?;
     if let Some(value) = store.get("screenInfo") {
