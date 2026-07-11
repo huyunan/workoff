@@ -150,6 +150,7 @@ async fn show_lock_windows(
             .resizable(false)
             .drag_and_drop(true)
             .always_on_top(true)
+            .inner_size(width, height)
             .position(x, y)
             .build()
             .map_err(|err| err.to_string())?;
