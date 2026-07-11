@@ -6,6 +6,7 @@ import {
 } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TauriEvent } from '@tauri-apps/api/event'
+import { enable, disable } from '@tauri-apps/plugin-autostart';
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
@@ -16,6 +17,8 @@ function App() {
     new URLSearchParams(window.location.search).get("lockscreen") === "1";
   // 过滤蓝光开关
   const [filterEnabled, setFilterEnabled] = useState(true);
+  // 开机自启
+  const [startupEnabled, setStartupEnabled] = useState(false);
   // 阴影开关
   const [shadow, setShadow] = useState(true);
   // 位置 X
@@ -147,6 +150,16 @@ function App() {
   }, []);
   
   useEffect(() => {
+    const startupEnabled = localStorage.getItem("startupEnabled") === "true";
+    if (startupEnabled) {
+      enable();
+      setStartupEnabled(true);
+    } else {
+      disable();
+      setStartupEnabled(false);
+    }
+    localStorage.setItem("startupEnabled", String(startupEnabled));
+    
     const filterEnabled = localStorage.getItem("filterEnabled");
     if (filterEnabled === null || filterEnabled === "true") {
       setFilterEnabled(true);
@@ -160,6 +173,18 @@ function App() {
   const changeFilterEnabled = (val: boolean) => {
       setFilterEnabled(val);
       localStorage.setItem("filterEnabled", String(val));
+  }
+  
+  const changeStartupEnabled = async (val: boolean) => {
+      if (val) {
+        await enable();
+        setStartupEnabled(true);
+        localStorage.setItem("startupEnabled", "true");
+      } else {
+        disable();
+        setStartupEnabled(false);
+        localStorage.setItem("startupEnabled", "false");
+      }
   }
   
   const changeShadow = async (val: boolean) => {
@@ -482,7 +507,7 @@ function App() {
                 </div>
 
                 <div className="rest-countdown">
-                  <p>文件：{filePath}</p>
+                  <p>回车自动保存文件：{filePath}</p>
                 </div>
 
                 <button
@@ -511,24 +536,24 @@ function App() {
 
                 <div className="settings">
                   <label className="setting-row">
-                    <span>开启护眼</span>
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={filterEnabled}
-                        onClick={() => changeFilterEnabled(!filterEnabled)}
-                      />
-                      <span className="toggle__track" />
-                    </label>
-                  </label>
-
-                  <label className="setting-row">
                     <span>阴影开关</span>
                     <label className="toggle">
                       <input
                         type="checkbox"
                         checked={shadow}
                         onClick={() => changeShadow(!shadow)}
+                      />
+                      <span className="toggle__track" />
+                    </label>
+                  </label>
+                  
+                  <label className="setting-row">
+                    <span>开机自启</span>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={startupEnabled}
+                        onClick={() => changeStartupEnabled(!startupEnabled)}
                       />
                       <span className="toggle__track" />
                     </label>
