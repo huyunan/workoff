@@ -530,6 +530,7 @@ input[type="range"] {
   width: 100vw;
   border: none;
   outline: none;
+  overflow: clip !important;
 }
 
 
