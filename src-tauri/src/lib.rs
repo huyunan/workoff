@@ -340,7 +340,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+            use tauri_plugin_global_shortcut::{Code, Error as ShortcutError, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
             let shift_1_shortcut = Shortcut::new(Some(Modifiers::SHIFT | Modifiers::ALT), Code::Digit1);
             let app_handle = app.handle();
             app_handle.plugin(
@@ -370,7 +370,13 @@ pub fn run() {
                 })
                 .build(),
             )?;
-            app.global_shortcut().register(shift_1_shortcut)?;
+            match app.global_shortcut().register(shift_1_shortcut) {
+                Ok(_) => println!("热键注册成功"),
+                Err(ShortcutError::GlobalHotkey(_)) => {
+                    eprintln!("警告：Shift+Alt+1 已被占用，无需重复注册");
+                }
+                Err(e) => return Err(e.into()), // 其他错误正常抛出
+            }
             
             let handle = app.handle().clone();
             get_default_size(handle);
