@@ -609,8 +609,7 @@ function App() {
       )}
       
       {isLockWindow && (
-        // <div className="lockscreen" data-tauri-drag-region>
-        <div className="lockscreen">
+        <div className="lockscreen" data-tauri-drag-region>
           <input
             type="text"
             value={value}

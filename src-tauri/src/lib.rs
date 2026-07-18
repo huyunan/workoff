@@ -9,10 +9,11 @@ use std::path::Path;
 use tauri_plugin_autostart::MacosLauncher;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    LazyLock, Mutex,
+    LazyLock, Mutex, Arc,
 };
+use std::time::{Duration, Instant};
 use tauri::{
-    menu::MenuBuilder,LogicalSize,LogicalPosition,
+    menu::MenuBuilder,LogicalSize,LogicalPosition,PhysicalPosition,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
@@ -189,6 +190,62 @@ async fn show_lock_windows(
         let _ = window.set_always_on_top(false);
         let _ = window.set_size(LogicalSize::new(width, height)).map_err(|e| e.to_string())?;
         labels.push(label);
+        
+        // 元组：(上次移动时间, 窗口坐标实体)
+        let state = Arc::new(Mutex::new((
+            Instant::now(),
+            PhysicalPosition { x: 0, y: 0 }
+        )));
+        
+        window.on_window_event(move |event| {
+            match event {
+                WindowEvent::Moved(pos_ref) => {
+                    println!("拖拽后窗口位置 x:{} y:{}", pos_ref.x, pos_ref.y);
+                    let pos = *pos_ref;
+                    let now = Instant::now();
+                    
+                    // 更新共享时间+坐标
+                    let mut guard = state.lock().unwrap();
+                    guard.0 = now;          //
+                    guard.1 = pos;
+                    drop(guard); // 主动释放锁，避免线程阻塞
+                    // 克隆Arc送入子线程，无任何临时引用
+                    let state_clone = Arc::clone(&state);
+                    let app_clone = app.clone();
+                    
+                    std::thread::spawn(move || {
+                        // 等待1.5s
+                        std::thread::sleep(Duration::from_millis(1500));
+                        let guard: std::sync::MutexGuard<'_, (Instant, PhysicalPosition<i32>)> = state_clone.lock().unwrap();
+                        let (last_time, final_pos) = *guard;
+                        // 判断：超过防抖间隔 = 拖拽停止
+                        if Instant::now() - last_time >= Duration::from_millis(1500) {
+                            println!("拖拽结束 x:{} y:{}", final_pos.x, final_pos.y);
+                            let mut config = CONFIG.lock().unwrap();
+                            
+                            config.x = (final_pos.x as f64/ config.scale).floor() as f64;
+                            config.y = (final_pos.y as f64 / config.scale).floor() as f64;
+                            if let Ok(store2) = app_clone.store("config.json") {
+                                store2.set("screenInfo", json!({
+                                    "screen_width": config.screen_width,
+                                    "screen_height": config.screen_height,
+                                    "width": config.width,
+                                    "height": config.height,
+                                    "scale": config.scale,
+                                    "font_size": config.font_size,
+                                    "x": config.x,
+                                    "y": config.y,
+                                    "shadow": config.shadow,
+                                    "tray_hidden": config.tray_hidden,
+                                }));
+                                store2.save().map_err(|e| e.to_string());
+                            }
+                        }
+                    });
+                }
+                _ => {}
+            }
+        });
         
         // let Some(main_window) = app.get_webview_window("main") else {
         //     return Ok(());
