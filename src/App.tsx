@@ -185,7 +185,7 @@ function App() {
     }
     
     const dragEnabled = localStorage.getItem("dragEnabled");
-    if (dragEnabled === null || dragEnabled === "true") {
+    if (dragEnabled === "true") {
       setDragEnabled(true);
       localStorage.setItem("dragEnabled", "true");
     } else {
