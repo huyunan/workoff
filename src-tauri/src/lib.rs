@@ -192,7 +192,7 @@ async fn show_lock_windows(
         labels.push(label);
         
         // 元组：(上次移动时间, 窗口坐标实体)
-        let state = Arc::new(Mutex::new((
+        let data = Arc::new(Mutex::new((
             Instant::now(),
             PhysicalPosition { x: 0, y: 0 }
         )));
@@ -200,27 +200,25 @@ async fn show_lock_windows(
         window.on_window_event(move |event| {
             match event {
                 WindowEvent::Moved(pos_ref) => {
-                    println!("拖拽后窗口位置 x:{} y:{}", pos_ref.x, pos_ref.y);
                     let pos = *pos_ref;
                     let now = Instant::now();
                     
                     // 更新共享时间+坐标
-                    let mut guard = state.lock().unwrap();
+                    let mut guard = data.lock().unwrap();
                     guard.0 = now;          //
                     guard.1 = pos;
                     drop(guard); // 主动释放锁，避免线程阻塞
                     // 克隆Arc送入子线程，无任何临时引用
-                    let state_clone = Arc::clone(&state);
+                    let data_clone = Arc::clone(&data);
                     let app_clone = app.clone();
                     
                     std::thread::spawn(move || {
                         // 等待1.5s
                         std::thread::sleep(Duration::from_millis(1500));
-                        let guard: std::sync::MutexGuard<'_, (Instant, PhysicalPosition<i32>)> = state_clone.lock().unwrap();
+                        let guard: std::sync::MutexGuard<'_, (Instant, PhysicalPosition<i32>)> = data_clone.lock().unwrap();
                         let (last_time, final_pos) = *guard;
                         // 判断：超过防抖间隔 = 拖拽停止
                         if Instant::now() - last_time >= Duration::from_millis(1500) {
-                            println!("拖拽结束 x:{} y:{}", final_pos.x, final_pos.y);
                             let mut config = CONFIG.lock().unwrap();
                             
                             config.x = (final_pos.x as f64/ config.scale).floor() as f64;
@@ -238,7 +236,11 @@ async fn show_lock_windows(
                                     "shadow": config.shadow,
                                     "tray_hidden": config.tray_hidden,
                                 }));
-                                store2.save().map_err(|e| e.to_string());
+                                let _ = store2.save();
+                            }
+                            
+                            if let Some(main_window) = app_clone.get_webview_window("main") {
+                                let _ = main_window.emit("send-action", "move");
                             }
                         }
                     });
@@ -453,7 +455,7 @@ pub fn run() {
                 .build(),
             )?;
             match app.global_shortcut().register(shift_1_shortcut) {
-                Ok(_) => println!("热键注册成功"),
+                Ok(_) => println!("shortcut success"),
                 Err(ShortcutError::GlobalHotkey(_)) => {
                     eprintln!("警告：Shift+Alt+1 已被占用，无需重复注册");
                 }

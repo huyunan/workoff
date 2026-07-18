@@ -21,6 +21,8 @@ function App() {
   const [startupEnabled, setStartupEnabled] = useState(false);
   // 阴影开关
   const [shadow, setShadow] = useState(true);
+  // 拖拽开关
+  const [dragEnabled, setDragEnabled] = useState(false);
   // 任务栏隐藏
   const [trayHidden, setTrayHidden] = useState(false);
   // 位置 X
@@ -138,6 +140,8 @@ function App() {
     listen<ConfigType | string>('send-action', (event) => {
       if (event.payload === "code1") {
         registerKey();
+      } else if (event.payload === "move") {
+        getScreenInfo();
       }
     })
     .then((fn) => {
@@ -179,11 +183,25 @@ function App() {
       setAutoKeyEnabled(false);
       localStorage.setItem("autoKeyEnabled", "false");
     }
+    
+    const dragEnabled = localStorage.getItem("dragEnabled");
+    if (dragEnabled === null || dragEnabled === "true") {
+      setDragEnabled(true);
+      localStorage.setItem("dragEnabled", "true");
+    } else {
+      setDragEnabled(false);
+      localStorage.setItem("dragEnabled", "false");
+    }
   }, []);
   
   const changeAutoKeyEnabled = (val: boolean) => {
       setAutoKeyEnabled(val);
       localStorage.setItem("autoKeyEnabled", String(val));
+  }
+  
+  const changeDragEnabled = (val: boolean) => {
+      setDragEnabled(val);
+      localStorage.setItem("dragEnabled", String(val));
   }
   
   const changeStartupEnabled = async (val: boolean) => {
@@ -601,6 +619,18 @@ function App() {
                       <span className="toggle__track" />
                     </label>
                   </label>
+                  
+                  <label className="setting-row">
+                    <span>拖拽开关</span>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={dragEnabled}
+                        onClick={() => changeDragEnabled(!dragEnabled)}
+                      />
+                      <span className="toggle__track" />
+                    </label>
+                  </label>
                 </div>
               </div>
             </section>
@@ -615,7 +645,7 @@ function App() {
             value={value}
             style={{
               fontSize: `${Number(fontSize)}px`,
-              height: shadow ? `100vh` : `calc(100vh - 1px)`,
+              height: dragEnabled ? `0` : shadow ? `100vh` : `calc(100vh - 1px)`,
               width: shadow ? `100vw` : `calc(100vw - 1px)`,
               border: shadow ? `none` : `1px solid #aeaeae`,
             }}
