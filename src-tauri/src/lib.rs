@@ -401,6 +401,8 @@ pub fn run() {
             }
             let tray_menu = MenuBuilder::new(app)
                 .text("tray_show", "显示主界面")
+                .text("tray_open", "开启")
+                .text("tray_close", "关闭")
                 .text("tray_hide", "隐藏到托盘")
                 .separator()
                 .text("tray_quit", "退出")
@@ -458,6 +460,19 @@ pub fn run() {
                                 state.allow_exit.store(true, Ordering::SeqCst);
                             }
                             app.exit(0);
+                        }
+                        _ => {}
+                    }
+                    let Some(window_input) = app.get_webview_window("lockscreen-primary") else {
+                        return;
+                    };
+                    match event.id().as_ref() {
+                        "tray_open" => {
+                            let _ = window_input.show();
+                            let _ = window_input.set_focus();
+                        }
+                        "tray_close" => {
+                            let _ = window_input.hide();
                         }
                         _ => {}
                     }
