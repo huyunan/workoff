@@ -21,6 +21,8 @@ function App() {
   const [startupEnabled, setStartupEnabled] = useState(false);
   // 阴影开关
   const [shadow, setShadow] = useState(true);
+  // 任务栏隐藏
+  const [trayHidden, setTrayHidden] = useState(false);
   // 位置 X
   const [posX, setPosX] = useState(100);
   // 位置 Y
@@ -43,6 +45,7 @@ function App() {
     x: number;
     y: number;
     shadow: boolean;
+    trayHidden: boolean;
   }
   
   // 获取全部屏幕尺寸
@@ -60,9 +63,10 @@ function App() {
       setScreenWidth(screenInfo.screen_width - screenInfo.width);
       setScreenHeight(screenInfo.screen_height - screenInfo.height);
       setShadow(screenInfo.shadow);
+      setTrayHidden(screenInfo.trayHidden);
     }).catch(() => undefined);
-  }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight, setShadow])
-  
+  }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight, setShadow, setTrayHidden])
+
   useEffect(() => {
     const id = setTimeout(async() => {
       await getScreenInfo();
@@ -199,6 +203,11 @@ function App() {
       setShadow(val);
   }
   
+  const changeTrayHidden = async (val: boolean) => {
+      await saveStorageSize({trayHidden: val});
+      setTrayHidden(val);
+  }
+  
   const changeLockWindows = (obj: any) => {
     invoke("change_lock_windows", { obj: JSON.stringify(obj) }).catch((error) =>
       console.error("修改锁屏窗口失败", error)
@@ -227,6 +236,9 @@ function App() {
       }
       if (data?.shadow !== undefined) {
         screenInfo.shadow = data.shadow
+      }
+      if (data?.trayHidden !== undefined) {
+        screenInfo.trayHidden = data.trayHidden
       }
       await store.set('screenInfo', screenInfo)
       await store.save();
@@ -573,6 +585,18 @@ function App() {
                         type="checkbox"
                         checked={autoKeyEnabled}
                         onClick={() => changeAutoKeyEnabled(!autoKeyEnabled)}
+                      />
+                      <span className="toggle__track" />
+                    </label>
+                  </label>
+                  
+                  <label className="setting-row">
+                    <span>任务栏隐藏</span>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={trayHidden}
+                        onClick={() => changeTrayHidden(!trayHidden)}
                       />
                       <span className="toggle__track" />
                     </label>

@@ -38,6 +38,7 @@ pub struct Config {
     x: f64,
     y: f64,
     shadow: bool,
+    trayHidden: bool,
 }
 
 static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
@@ -51,6 +52,7 @@ static CONFIG: LazyLock<Mutex<Config>> = LazyLock::new(|| {
         x: -1.0,
         y: -1.0,
         shadow: true,
+        trayHidden: false,
     })
 });
 
@@ -85,6 +87,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 config.height = prev.height;
                 config.font_size = prev.font_size;
                 config.shadow = prev.shadow;
+                config.trayHidden = prev.trayHidden;
                 
                 store.set("screenInfo", json!({
                     "screen_width": config.screen_width,
@@ -96,6 +99,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                     "x": config.x,
                     "y": config.y,
                     "shadow": config.shadow,
+                    "trayHidden": config.trayHidden,
                 }));
                 store.save().map_err(|e| e.to_string())?;
             }
@@ -112,6 +116,7 @@ async fn get_default_size(app: tauri::AppHandle) -> Result<(), String> {
                 "x": config.x,
                 "y": config.y,
                 "shadow": config.shadow,
+                "trayHidden": config.trayHidden,
             }));
             store.save().map_err(|e| e.to_string())?;
         }
@@ -161,6 +166,7 @@ async fn show_lock_windows(
             .decorations(false)
             .transparent(false)
             .shadow(size.shadow)
+            .skip_taskbar(size.trayHidden)
             .resizable(false)
             .drag_and_drop(true)
             .always_on_top(true)
@@ -228,6 +234,7 @@ fn change_lock_windows(
                     config.screen_width = prev.screen_width;
                     config.screen_height = prev.screen_height;
                     config.shadow = prev.shadow;
+                    config.trayHidden = prev.trayHidden;
                     let _ = window.set_always_on_top(false);
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -260,6 +267,11 @@ fn change_lock_windows(
                         config.shadow = shadow;
                         let _ = window.set_shadow(shadow).map_err(|e| e.to_string())?;
                     }
+                    if map.contains_key("trayHidden") {
+                        let trayHidden = map.get("trayHidden").unwrap().as_bool().unwrap();
+                        config.trayHidden = trayHidden;
+                        let _ = window.set_skip_taskbar(trayHidden).map_err(|e| e.to_string())?;
+                    }
                     store.set("screenInfo", json!({
                         "screen_width": config.screen_width,
                         "screen_height": config.screen_height,
@@ -270,6 +282,7 @@ fn change_lock_windows(
                         "x": config.x,
                         "y": config.y,
                         "shadow": config.shadow,
+                        "trayHidden": config.trayHidden,
                     }));
                     store.save().map_err(|e| e.to_string())?;
                 }
