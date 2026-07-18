@@ -45,7 +45,7 @@ function App() {
     x: number;
     y: number;
     shadow: boolean;
-    trayHidden: boolean;
+    tray_hidden: boolean;
   }
   
   // 获取全部屏幕尺寸
@@ -63,7 +63,7 @@ function App() {
       setScreenWidth(screenInfo.screen_width - screenInfo.width);
       setScreenHeight(screenInfo.screen_height - screenInfo.height);
       setShadow(screenInfo.shadow);
-      setTrayHidden(screenInfo.trayHidden);
+      setTrayHidden(screenInfo.tray_hidden);
     }).catch(() => undefined);
   }, [setPosX, setPosY, setWidth, setHeight, setFontSize, setScreenWidth, setScreenHeight, setShadow, setTrayHidden])
 
@@ -204,7 +204,7 @@ function App() {
   }
   
   const changeTrayHidden = async (val: boolean) => {
-      await saveStorageSize({trayHidden: val});
+      await saveStorageSize({tray_hidden: val});
       setTrayHidden(val);
   }
   
@@ -237,8 +237,8 @@ function App() {
       if (data?.shadow !== undefined) {
         screenInfo.shadow = data.shadow
       }
-      if (data?.trayHidden !== undefined) {
-        screenInfo.trayHidden = data.trayHidden
+      if (data?.tray_hidden !== undefined) {
+        screenInfo.tray_hidden = data.tray_hidden
       }
       await store.set('screenInfo', screenInfo)
       await store.save();
